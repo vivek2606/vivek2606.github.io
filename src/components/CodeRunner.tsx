@@ -47,7 +47,14 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
       <div className="code-runner__header">
         <span className="code-runner__lang">{runtime.label}</span>
         <button type="button" onClick={handleRun} disabled={isBusy} className="code-runner__run">
-          {status === "loading" ? "Loading…" : status === "running" ? "Running…" : "▶ Run"}
+          {isBusy ? (
+            <span className="code-runner__spinner" aria-hidden="true" />
+          ) : (
+            <svg className="code-runner__play-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 2.5v11l9-5.5-9-5.5Z" />
+            </svg>
+          )}
+          <span>{status === "loading" ? "Loading…" : status === "running" ? "Running…" : "Run"}</span>
         </button>
       </div>
       <Editor
