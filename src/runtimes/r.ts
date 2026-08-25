@@ -1,11 +1,14 @@
 import type { LanguageRuntime, RunResult } from "./types";
 import type { WebRShelter } from "./webr-loader";
 import { loadWebR } from "./webr-loader";
+import { withBase } from "../lib/base-url";
 
 // Self-hosted rather than CDN-loaded: scripts/copy-webr-assets.mjs copies
 // these files from node_modules/webr into public/webr/ at dev/build time,
 // so the blog has no runtime dependency on a third-party CDN.
-const WEBR_BASE_URL = "/webr/";
+// withBase (not a hardcoded "/") so this still resolves once deployed
+// under a subpath, e.g. GitHub Pages' /<repo>/.
+const WEBR_BASE_URL = withBase("webr/");
 
 let shelterPromise: Promise<WebRShelter> | null = null;
 let shelter: WebRShelter | null = null;
