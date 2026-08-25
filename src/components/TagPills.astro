@@ -1,6 +1,4 @@
 ---
-import { withBase } from "../lib/base-url";
-
 interface Props {
   tags: string[];
 }
@@ -12,7 +10,7 @@ const { tags } = Astro.props;
     <ul class="tag-pills">
       {tags.map((tag) => (
         <li>
-          <a href={withBase(`/blog/?tag=${encodeURIComponent(tag)}`)} class="tag-pill">
+          <a href={`/blog/?tag=${encodeURIComponent(tag)}`} class="tag-pill">
             {tag}
           </a>
         </li>

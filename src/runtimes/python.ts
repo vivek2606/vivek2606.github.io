@@ -1,12 +1,9 @@
 import type { LanguageRuntime, RunResult } from "./types";
-import { withBase } from "../lib/base-url";
 
 // Self-hosted rather than CDN-loaded: scripts/copy-pyodide-assets.mjs copies
 // these files from node_modules/pyodide into public/pyodide/ at dev/build
 // time, so the blog has no runtime dependency on a third-party CDN.
-// withBase (not a hardcoded "/") so this still resolves once deployed
-// under a subpath, e.g. GitHub Pages' /<repo>/.
-const PYODIDE_BASE_URL = withBase("pyodide/");
+const PYODIDE_BASE_URL = "/pyodide/";
 
 declare global {
   interface Window {

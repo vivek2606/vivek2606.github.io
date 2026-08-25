@@ -2,13 +2,11 @@ import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 
-// GitHub Pages serves a project site (not a user/org site) from
-// /<repo-name>/, not the domain root. Scoping `base` to CI keeps local
-// `npm run dev` at "/" while the deployed build gets the GH Pages prefix.
-const isCI = process.env.GITHUB_ACTIONS === "true";
-
+// vivek2606.github.io is a GitHub Pages *user* site (repo name matches the
+// username), which always serves at the domain root — unlike a project
+// site (any other repo name), which is served from /<repo-name>/. No
+// `base` config needed here as a result.
 export default defineConfig({
   site: "https://vivek2606.github.io",
-  base: isCI ? "/personal-blog" : "/",
   integrations: [react(), mdx()],
 });

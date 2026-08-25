@@ -1,6 +1,5 @@
 ---
 import type { CollectionEntry } from "astro:content";
-import { withBase } from "../lib/base-url";
 import PostMeta from "./PostMeta.astro";
 import { estimateReadingTime } from "../lib/reading-time";
 
@@ -20,7 +19,7 @@ const searchIndex = [post.data.title, post.data.description, ...post.data.tags]
   data-tags={post.data.tags.join(",").toLowerCase()}
 >
   <h2 class="post-card__title">
-    <a href={withBase(`/blog/${post.slug}/`)}>{post.data.title}</a>
+    <a href={`/blog/${post.slug}/`}>{post.data.title}</a>
   </h2>
   <PostMeta date={post.data.date} author={post.data.author} readingTime={readingTime} />
   <p class="post-card__description">{post.data.description}</p>
