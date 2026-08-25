@@ -12,11 +12,11 @@ island, the same "load on first click" behavior — just backed by a
 different runtime: [webR](https://docs.r-wasm.org/webr/latest/), a
 WebAssembly build of R.
 
-<CodeRunner client:visible lang="r" code={`x <- rnorm(5)
+<CodeRunner client:only="react" lang="r" code={`x <- rnorm(5)
 print(x)
 mean(x)
 `} />
 
 Vectors and data frames print the way they would at an R console:
 
-<CodeRunner client:visible lang="r" code={`summary(mtcars$mpg)`} />
+<CodeRunner client:only="react" lang="r" code={`summary(mtcars$mpg)`} />

@@ -1,0 +1,38 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { withBase } from "../lib/base-url";
+import PostMeta from "./PostMeta.astro";
+import { estimateReadingTime } from "../lib/reading-time";
+
+interface Props {
+  post: CollectionEntry<"blog">;
+}
+const { post } = Astro.props;
+const readingTime = estimateReadingTime(post.body);
+const searchIndex = [post.data.title, post.data.description, ...post.data.tags]
+  .join(" ")
+  .toLowerCase();
+---
+
+<article
+  class="post-card"
+  data-search={searchIndex}
+  data-tags={post.data.tags.join(",").toLowerCase()}
+>
+  <h2 class="post-card__title">
+    <a href={withBase(`/blog/${post.slug}/`)}>{post.data.title}</a>
+  </h2>
+  <PostMeta date={post.data.date} author={post.data.author} readingTime={readingTime} />
+  <p class="post-card__description">{post.data.description}</p>
+  {
+    post.data.tags.length > 0 && (
+      <ul class="tag-pills tag-pills--small">
+        {post.data.tags.map((tag) => (
+          <li>
+            <span class="tag-pill">{tag}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</article>

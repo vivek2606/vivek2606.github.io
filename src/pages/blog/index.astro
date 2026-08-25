@@ -1,0 +1,81 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import PostCard from "../../components/PostCard.astro";
+import TagFilterSidebar from "../../components/TagFilterSidebar.astro";
+
+const posts = (await getCollection("blog")).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+
+const tagCounts = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags) {
+    tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  }
+}
+const tags = [...tagCounts.entries()]
+  .sort((a, b) => b[1] - a[1])
+  .map(([tag, count]) => ({ tag, count }));
+---
+
+<Base title="Blog · Vivek Raj" description="R, Python, Haskell, and Julia code examples that run inline in the browser." wide>
+  <div class="blog-layout">
+    <div class="blog-main">
+      <h1>Blog</h1>
+      <input
+        type="search"
+        id="blog-search"
+        class="search-input"
+        placeholder="Search posts…"
+        aria-label="Search posts"
+      />
+      <p id="no-results" class="no-results" hidden>No posts match your search.</p>
+      <div class="post-list" id="post-list">
+        {posts.map((post) => <PostCard post={post} />)}
+      </div>
+    </div>
+    <TagFilterSidebar tags={tags} />
+  </div>
+</Base>
+
+<script>
+  const searchInput = document.getElementById("blog-search") as HTMLInputElement;
+  const cards = Array.from(document.querySelectorAll<HTMLElement>(".post-card"));
+  const tagButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".tag-filter"));
+  const noResults = document.getElementById("no-results")!;
+
+  let activeTag = new URLSearchParams(location.search).get("tag")?.toLowerCase() ?? "";
+
+  function applyFilter() {
+    const query = searchInput.value.trim().toLowerCase();
+    let visibleCount = 0;
+    for (const card of cards) {
+      const matchesSearch = !query || (card.dataset.search ?? "").includes(query);
+      const cardTags = (card.dataset.tags ?? "").split(",");
+      const matchesTag = !activeTag || cardTags.includes(activeTag);
+      const visible = matchesSearch && matchesTag;
+      card.hidden = !visible;
+      if (visible) visibleCount++;
+    }
+    noResults.hidden = visibleCount > 0;
+
+    for (const button of tagButtons) {
+      button.classList.toggle("tag-filter--active", (button.dataset.tag ?? "") === activeTag);
+    }
+  }
+
+  searchInput.addEventListener("input", applyFilter);
+  for (const button of tagButtons) {
+    button.addEventListener("click", () => {
+      activeTag = button.dataset.tag ?? "";
+      const url = new URL(location.href);
+      if (activeTag) url.searchParams.set("tag", activeTag);
+      else url.searchParams.delete("tag");
+      history.replaceState(null, "", url);
+      applyFilter();
+    });
+  }
+
+  applyFilter();
+</script>

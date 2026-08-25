@@ -1,0 +1,24 @@
+---
+interface Props {
+  tags: { tag: string; count: number }[];
+}
+const { tags } = Astro.props;
+---
+
+<aside class="tag-sidebar">
+  <h2 class="tag-sidebar__heading">Tags</h2>
+  <ul class="tag-sidebar__list">
+    <li>
+      <button type="button" class="tag-filter tag-filter--active" data-tag="">All posts</button>
+    </li>
+    {
+      tags.map(({ tag, count }) => (
+        <li>
+          <button type="button" class="tag-filter" data-tag={tag.toLowerCase()}>
+            {tag} <span class="tag-filter__count">{count}</span>
+          </button>
+        </li>
+      ))
+    }
+  </ul>
+</aside>

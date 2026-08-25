@@ -1,0 +1,31 @@
+---
+import { withBase } from "../lib/base-url";
+
+const { pathname } = Astro.url;
+
+function isActive(href: string): boolean {
+  if (href === withBase("/")) return pathname === href;
+  return pathname.startsWith(href);
+}
+
+const links = [
+  { href: withBase("/"), label: "Home" },
+  { href: withBase("/blog/"), label: "Blog" },
+  { href: withBase("/about/"), label: "About" },
+];
+---
+
+<header class="navbar">
+  <div class="navbar__inner">
+    <a class="navbar__brand" href={withBase("/")}>Vivek Raj</a>
+    <nav class="navbar__links" aria-label="Main navigation">
+      {
+        links.map((link) => (
+          <a href={link.href} class:list={["navbar__link", { "navbar__link--active": isActive(link.href) }]}>
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+</header>

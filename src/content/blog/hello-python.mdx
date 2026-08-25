@@ -14,11 +14,11 @@ the page after that.
 
 Try editing this and hitting run:
 
-<CodeRunner client:visible lang="python" code={`name = "world"
+<CodeRunner client:only="react" lang="python" code={`name = "world"
 for i in range(3):
     print(f"hello, {name}! ({i})")
 `} />
 
 Return values from the last expression get printed too, REPL-style:
 
-<CodeRunner client:visible lang="python" code={`sum(x * x for x in range(10))`} />
+<CodeRunner client:only="react" lang="python" code={`sum(x * x for x in range(10))`} />

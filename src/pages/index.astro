@@ -1,32 +1,35 @@
 ---
 import { getCollection } from "astro:content";
 import Base from "../layouts/Base.astro";
+import PostCard from "../components/PostCard.astro";
 import { withBase } from "../lib/base-url";
 
 const posts = (await getCollection("blog")).sort(
   (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
 );
+const latestPosts = posts.slice(0, 3);
 ---
 
-<Base title="My Blog">
-  <p>Code examples in R, Python, Haskell, and Julia — run inline in the browser.</p>
-  <ul style="list-style: none; padding: 0;">
-    {
-      posts.map((post) => (
-        <li class="post-list-item">
-          <h2>
-            <a href={withBase(`blog/${post.slug}/`)}>{post.data.title}</a>
-          </h2>
-          <p class="post-meta">
-            {post.data.date.toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
-          <p>{post.data.description}</p>
-        </li>
-      ))
-    }
-  </ul>
+<Base title="Vivek Raj" description="Personal blog: R, Python, Haskell, and Julia code examples that run inline in the browser.">
+  <section class="hero">
+    <h1 class="hero__title">Hi, I'm Vivek Raj 👋</h1>
+    <p class="hero__tagline">
+      Data Science &amp; Deep Learning enthusiast. I write about R, Python, Haskell, and Julia —
+      with code examples you can run right here in the browser, no setup required.
+    </p>
+    <div class="hero__cta">
+      <a href={withBase("/blog/")} class="button button--primary">Read the blog</a>
+      <a href={withBase("/about/")} class="button button--secondary">About me</a>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-heading">
+      <h2>Latest posts</h2>
+      <a href={withBase("/blog/")}>View all →</a>
+    </div>
+    <div class="post-list">
+      {latestPosts.map((post) => <PostCard post={post} />)}
+    </div>
+  </section>
 </Base>

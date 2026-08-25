@@ -1,5 +1,8 @@
 import { useId, useRef, useState } from "react";
+import Editor from "react-simple-code-editor";
 import { getRuntime } from "../runtimes";
+import { highlight } from "../lib/prism-languages";
+import "prismjs/themes/prism-tomorrow.css";
 
 interface CodeRunnerProps {
   lang: string;
@@ -47,12 +50,15 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
           {status === "loading" ? "Loading…" : status === "running" ? "Running…" : "▶ Run"}
         </button>
       </div>
-      <textarea
-        className="code-runner__editor"
+      <Editor
         value={code}
-        onChange={(e) => setCode(e.target.value)}
-        spellCheck={false}
-        rows={code.split("\n").length + 1}
+        onValueChange={setCode}
+        highlight={(value) => highlight(value, lang)}
+        padding={16}
+        textareaClassName="code-runner__editor-input"
+        preClassName="code-runner__editor-pre"
+        className="code-runner__editor"
+        style={{ fontFamily: "var(--mono-font)", fontSize: "0.9rem" }}
         aria-label={`Editable ${runtime.label} code`}
       />
       {isBusy && statusMessage && <p className="code-runner__status">{statusMessage}</p>}
