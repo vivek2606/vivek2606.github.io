@@ -1,0 +1,22 @@
+---
+title: "R is next: running it inline via webR"
+description: "How R code blocks execute in the browser, using webR."
+date: 2026-08-25
+tags: ["r", "meta"]
+---
+
+import CodeRunner from "../../components/CodeRunner.tsx";
+
+R blocks work exactly the same way Python blocks do — the same `CodeRunner`
+island, the same "load on first click" behavior — just backed by a
+different runtime: [webR](https://docs.r-wasm.org/webr/latest/), a
+WebAssembly build of R.
+
+<CodeRunner client:visible lang="r" code={`x <- rnorm(5)
+print(x)
+mean(x)
+`} />
+
+Vectors and data frames print the way they would at an R console:
+
+<CodeRunner client:visible lang="r" code={`summary(mtcars$mpg)`} />

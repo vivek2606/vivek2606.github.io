@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node scripts/copy-pyodide-assets.mjs",
+    "predev": "node scripts/copy-pyodide-assets.mjs && node scripts/copy-webr-assets.mjs",
     "dev": "astro dev",
-    "prebuild": "node scripts/copy-pyodide-assets.mjs",
-    "build": "astro check && astro build",
+    "prebuild": "node scripts/copy-pyodide-assets.mjs && node scripts/copy-webr-assets.mjs",
+    "build": "astro build",
+    "typecheck": "astro check",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -17,7 +18,8 @@
     "astro": "^5.16.0",
     "pyodide": "^0.26.4",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "webr": "^0.6.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
