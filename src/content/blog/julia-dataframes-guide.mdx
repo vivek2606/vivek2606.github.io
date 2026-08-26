@@ -1,0 +1,682 @@
+---
+title: "The Complete Guide to Julia DataFrames.jl"
+description: "A comprehensive, example-driven tour of DataFrames.jl — every core feature explained and benchmarked against pandas, NumPy, and R, so you know exactly when Julia's data tooling pulls ahead."
+date: "2026-08-26"
+tags: ["julia", "dataframes", "pandas", "numpy", "r", "data-science", "performance"]
+author: "Vivek Raj"
+---
+
+If you've spent any time doing data analysis in Python, you know the drill: prototype in pandas, hit a wall on performance, drop into NumPy or Cython or a Rust extension to make the hot loop fast again, then glue it all back together. This is often called the **"two-language problem"** — the language that's pleasant to write in (Python, R) usually isn't the language that runs fast, so production code ends up split across two languages and two mental models.
+
+Julia was built specifically to close that gap: a language with the readability of Python, the statistical ergonomics of R, and — thanks to just-in-time (JIT) compilation via LLVM — the raw speed of C in the hot paths that matter most for data work. **DataFrames.jl** is the tabular-data workhorse of the Julia ecosystem, playing the same role pandas plays in Python.
+
+This post is a deep, hands-on tour of DataFrames.jl. Every feature is demonstrated with a runnable example, and — because most readers are coming from Python or R — every example is paired with the equivalent pandas/NumPy (and, where it clarifies things, R) code, so you can map your existing mental model onto Julia directly. By the end you should be able to read, write, and reason about performance in Julia DataFrames as confidently as you already do in pandas.
+
+**Versions used in this post:** Julia 1.11, DataFrames.jl 1.7, pandas 3.0 (the copy-on-write-by-default release), NumPy 2.x, and R 4.x with base `data.frame` / `dplyr` for comparison. Exact syntax is stable across recent minor versions, but always check the [official DataFrames.jl documentation](https://dataframes.juliadata.org/stable/) for the latest.
+
+## Table of contents
+
+1. Why Julia for data analysis
+2. Installation and setup
+3. Creating DataFrames
+4. Inspecting data
+5. Indexing and selecting
+6. Filtering rows
+7. Adding and transforming columns
+8. Sorting
+9. Handling missing data
+10. Group-by and aggregation (split-apply-combine)
+11. Joining DataFrames
+12. Reshaping: wide ↔ long
+13. Fluent chains with DataFramesMeta.jl
+14. Categorical data
+15. Reading and writing CSV/Parquet
+16. Performance deep dive: why Julia is fast here
+17. Julia vs pandas vs R: the honest comparison
+18. When each tool actually wins
+19. Further resources
+
+---
+
+## 1. Why Julia for data analysis
+
+Three structural properties of Julia matter for dataframes specifically:
+
+**Just-in-time compilation with type specialization.** When you call a function on a column of `Int64`, Julia compiles a version of that function specialized for `Int64`. Call it again on a `Float64` column and it compiles a *different* specialized version. This is why hand-written Julia loops over DataFrame columns run at C-like speed, instead of needing to be "vectorized" into NumPy/pandas calls to avoid the Python interpreter loop.
+
+**Multiple dispatch.** Functions in Julia aren't attached to objects (`df.groupby(...)`) — they're generic functions that dispatch on the types of *all* their arguments (`groupby(df, :col)`). This lets independent packages extend DataFrames.jl's behavior without monkey-patching, which is how the whole ecosystem (`CategoricalArrays.jl`, `StatsBase.jl`, `Plots.jl`, `MLJ.jl`) composes so cleanly.
+
+**No two-language problem.** In pandas, once you need something faster than vectorized NumPy allows (say, a stateful rolling computation with branching logic), you typically drop to Cython, Numba, or a compiled extension. In Julia, you just write a `for` loop. It will be fast, because that's what the compiler is for.
+
+None of this means Julia is strictly "better" — Section 17 covers the real trade-offs, including where pandas and R still win. But it explains *why* DataFrames.jl exists and what problem it's solving.
+
+## 2. Installation and setup
+
+```julia
+# Julia — one-time setup
+using Pkg
+Pkg.add(["DataFrames", "CSV", "Statistics", "DataFramesMeta", "CategoricalArrays", "BenchmarkTools"])
+
+using DataFrames, CSV, Statistics
+```
+
+```python
+# Python — equivalent
+# pip install pandas numpy pyarrow
+
+import pandas as pd
+import numpy as np
+```
+
+```r
+# R — equivalent
+install.packages(c("dplyr", "tidyr", "data.table"))
+library(dplyr)
+```
+
+Julia's package manager (`Pkg`) resolves an exact, reproducible environment per project via `Project.toml`/`Manifest.toml` — conceptually similar to a `requirements.txt` + `pip-compile` lockfile, but built into the language itself and enforced by default.
+
+## 3. Creating DataFrames
+
+### From columns (the common case)
+
+```julia
+using DataFrames
+
+df = DataFrame(
+    name   = ["Alice", "Bob", "Carol", "Dave"],
+    age    = [25, 32, 29, 41],
+    salary = [72000.0, 65500.0, 91200.0, 88750.0],
+    dept   = ["Eng", "Sales", "Eng", "Ops"],
+)
+```
+
+```python
+import pandas as pd
+
+df = pd.DataFrame({
+    "name":   ["Alice", "Bob", "Carol", "Dave"],
+    "age":    [25, 32, 29, 41],
+    "salary": [72000.0, 65500.0, 91200.0, 88750.0],
+    "dept":   ["Eng", "Sales", "Eng", "Ops"],
+})
+```
+
+```r
+df <- data.frame(
+  name   = c("Alice", "Bob", "Carol", "Dave"),
+  age    = c(25, 32, 29, 41),
+  salary = c(72000.0, 65500.0, 91200.0, 88750.0),
+  dept   = c("Eng", "Sales", "Eng", "Ops")
+)
+```
+
+The keyword-argument constructor is the idiomatic way to build a Julia `DataFrame`, but there are others:
+
+```julia
+# From a vector of NamedTuples (row-oriented, like a list of dicts)
+rows = [(name="Alice", age=25), (name="Bob", age=32)]
+df2 = DataFrame(rows)
+
+# From a matrix, with explicit column names
+mat = rand(5, 3)
+df3 = DataFrame(mat, [:x, :y, :z])
+
+# Empty, then build up
+df4 = DataFrame(id=Int[], value=Float64[])
+push!(df4, (id=1, value=3.14))
+```
+
+```python
+# pandas equivalents
+rows = [{"name": "Alice", "age": 25}, {"name": "Bob", "age": 32}]
+df2 = pd.DataFrame(rows)
+
+mat = np.random.rand(5, 3)
+df3 = pd.DataFrame(mat, columns=["x", "y", "z"])
+
+df4 = pd.DataFrame({"id": pd.Series(dtype="int64"), "value": pd.Series(dtype="float64")})
+df4 = pd.concat([df4, pd.DataFrame([{"id": 1, "value": 3.14}])], ignore_index=True)
+```
+
+Notice the `push!` row-append: because Julia knows the concrete type of every column (`Vector{Int64}`, `Vector{Float64}`, …), appending a row is a cheap, type-stable operation. The pandas equivalent (`df.append` was removed in pandas 2.0) now requires `pd.concat`, which is O(n) and explicitly discouraged in a loop — pandas' columnar, contiguous-array design makes single-row inserts fundamentally more expensive than Julia's.
+
+### The DataFrame is column-major, just like a `Vector` of `Vector`s
+
+Under the hood, a `DataFrame` is essentially a named collection of Julia `Vector`s (technically `AbstractVector`s), each with its own concrete element type. This is the same storage philosophy as pandas' block manager, but there is no hidden "object" dtype fallback — every column keeps a real, statically-known Julia type unless you explicitly opt into heterogeneity with `Any`.
+
+## 4. Inspecting data
+
+```julia
+size(df)          # (4, 4)  -> (nrow, ncol)
+nrow(df)          # 4
+ncol(df)          # 4
+names(df)         # ["name", "age", "salary", "dept"]
+propertynames(df) # [:name, :age, :salary, :dept]
+eltype.(eachcol(df))  # element type of every column
+
+first(df, 2)       # first 2 rows, returns a DataFrame
+last(df, 2)        # last 2 rows
+describe(df)        # summary stats: mean, min, max, nmissing, eltype per column
+```
+
+```python
+df.shape            # (4, 4)
+len(df)             # 4
+df.shape[1]         # 4
+df.columns.tolist()  # ['name', 'age', 'salary', 'dept']
+df.dtypes            # dtype of every column
+
+df.head(2)
+df.tail(2)
+df.describe(include="all")   # numeric + categorical summary
+df.info()                     # dtypes + memory usage
+```
+
+```r
+dim(df)
+nrow(df); ncol(df)
+names(df)
+str(df)      # structure + types
+head(df, 2)
+tail(df, 2)
+summary(df)
+```
+
+One nice detail: `describe(df)` in DataFrames.jl reports `nmissing` per column by default, so you get a missing-data audit for free — in pandas you typically chain `.isna().sum()` alongside `.describe()` to get the same picture.
+
+## 5. Indexing and selecting
+
+DataFrames.jl indexing follows the pattern `df[rows, cols]`, deliberately mirroring Julia's `Array` indexing — which itself maps closely onto NumPy's `arr[rows, cols]`. The one Julia-specific wrinkle to learn is the difference between `:` and `!` for row selection:
+
+```julia
+df[:, :age]     # COPY of the age column, as a Vector
+df[!, :age]     # the ACTUAL age column, no copy (a view into df)
+df.age          # shorthand for df[!, :age]
+
+df[1, :]        # row 1, as a DataFrameRow
+df[1:2, :]      # rows 1-2, as a DataFrame
+df[:, [:name, :age]]     # two columns, all rows, new DataFrame
+df[!, Not(:dept)]         # every column except :dept
+df[!, Between(:age, :dept)]   # columns from :age to :dept inclusive
+df[:, r"^s"]        # regex: any column starting with 's' (salary)
+```
+
+```python
+df["age"].copy()      # explicit copy of a Series
+df["age"]              # a view/reference (pandas 3.0: copy-on-write means
+                         # any mutation still can't leak back to df)
+df.age                  # attribute access, same Series
+
+df.iloc[0]              # row 0, as a Series
+df.iloc[0:2]             # rows 0-1, as a DataFrame
+df[["name", "age"]]      # two columns
+df.drop(columns=["dept"])   # every column except 'dept'
+df.loc[:, "age":"dept"]     # columns from age to dept inclusive (label slice)
+df.filter(regex="^s")        # columns starting with 's'
+```
+
+The `:` vs `!` distinction has no direct pandas equivalent because pandas' copy-vs-view semantics are implicit and have actually changed across major versions (this is precisely what pandas 3.0's Copy-on-Write default was introduced to make predictable — see Section 17). DataFrames.jl makes the copy/no-copy choice an explicit, visible part of the syntax instead of an implementation detail you have to intuit.
+
+### Selector objects: the real power tool
+
+```julia
+using DataFrames
+
+select(df, :name, :age)                  # keep just these, in this order
+select(df, Not(:dept))                    # everything except :dept
+select(df, Between(:age, :salary))        # inclusive column range
+select(df, All())                          # everything (identity)
+select(df, Cols(startswith("s")))          # custom predicate on column names
+select(df, :age => :years)                 # select + rename in one step
+```
+
+```python
+df[["name", "age"]]
+df.drop(columns=["dept"])
+df.loc[:, "age":"salary"]
+df               # .loc[:, :] is the identity
+df.filter(like="s")     # substring, not quite startswith — use regex="^s"
+df[["age"]].rename(columns={"age": "years"})
+```
+
+`select` (and its sibling `transform`, covered next) never mutates `df` unless you use the `!` variant (`select!`), which mirrors the Julia-wide convention that a trailing `!` marks a function as mutating — the same convention `sort!`, `push!`, and `filter!` follow. pandas has an analogous `inplace=True` flag, but it's being phased out precisely because it interacts badly with Copy-on-Write; Julia's `!` convention is baked into the language and unambiguous.
+
+## 6. Filtering rows
+
+```julia
+# Boolean mask, broadcasting comparisons with the dot syntax
+df[df.age .> 28, :]
+
+# Multiple conditions
+df[(df.age .> 28) .& (df.dept .== "Eng"), :]
+
+# The `subset` function — more composable, supports the col => predicate form
+subset(df, :age => a -> a .> 28)
+subset(df, :dept => ByRow(==("Eng")), :age => ByRow(>=(29)))
+
+# filter() operates on rows as NamedTuple-like objects
+filter(row -> row.age > 28 && row.dept == "Eng", df)
+filter([:age, :dept] => (a, d) -> a > 28 && d == "Eng", df)
+```
+
+```python
+df[df["age"] > 28]
+
+df[(df["age"] > 28) & (df["dept"] == "Eng")]
+
+df.query("age > 28")
+df.query("dept == 'Eng' and age >= 29")
+
+df[df.apply(lambda row: row.age > 28 and row.dept == "Eng", axis=1)]
+```
+
+```r
+# dplyr
+df %>% filter(age > 28)
+df %>% filter(age > 28, dept == "Eng")
+```
+
+The `.` in `df.age .> 28` is Julia's **broadcasting operator** — it's not decorative. `>` alone compares two scalars; `.>` explicitly asks Julia to apply `>` element-wise across the vector, and the compiler *fuses* every chained broadcast (`.&`, `.>`, `.==`, …) into a single loop with no intermediate array allocations. This is conceptually similar to how NumPy vectorizes `arr > 28`, except NumPy's vectorization is a hard-coded C kernel per operation, while Julia's broadcasting is a general mechanism that works identically whether you're calling a builtin comparison or a function you wrote five minutes ago.
+
+## 7. Adding and transforming columns
+
+This is where the source `=>` function `=>` destination "mini-language" of DataFrames.jl becomes central. The shape is always:
+
+```
+column(s)_in  =>  function  =>  column_name_out
+```
+
+```julia
+# In-place mutation with dot-broadcasting (most direct)
+df.bonus = df.salary .* 0.10
+
+# transform() — keeps all existing columns, adds new ones
+transform(df, :salary => (s -> s .* 0.10) => :bonus)
+transform(df, [:salary, :age] => ((s, a) -> s ./ a) => :salary_per_age_year)
+
+# ByRow: apply a scalar function to each row instead of the whole vector at once
+transform(df, :name => ByRow(uppercase) => :name_upper)
+transform(df, [:age, :dept] => ByRow((a, d) -> a > 30 && d == "Eng" ? "senior_eng" : "other") => :segment)
+
+# transform! mutates df directly
+transform!(df, :salary => (s -> s .* 1.03) => :salary)   # 3% raise, overwrite column
+
+# select() with a transform, but DROPS everything not explicitly kept
+select(df, :name, :salary => (s -> s .* 0.10) => :bonus)
+```
+
+```python
+# Direct assignment
+df["bonus"] = df["salary"] * 0.10
+
+# .assign() — functional style, returns a new DataFrame
+df = df.assign(bonus=lambda d: d["salary"] * 0.10)
+df = df.assign(salary_per_age_year=lambda d: d["salary"] / d["age"])
+
+# .apply() for row-wise logic (slow: Python-level loop under the hood)
+df["name_upper"] = df["name"].str.upper()   # prefer vectorized .str accessor
+df["segment"] = df.apply(
+    lambda r: "senior_eng" if r["age"] > 30 and r["dept"] == "Eng" else "other",
+    axis=1,
+)
+
+df["salary"] = df["salary"] * 1.03
+
+df[["name"]].assign(bonus=df["salary"] * 0.10)
+```
+
+```r
+# dplyr
+df <- df %>% mutate(bonus = salary * 0.10)
+df <- df %>% mutate(salary_per_age_year = salary / age)
+df <- df %>% mutate(name_upper = toupper(name))
+df <- df %>%
+  mutate(segment = if_else(age > 30 & dept == "Eng", "senior_eng", "other"))
+```
+
+The `ByRow` wrapper deserves special attention, because it's where the performance story really diverges from pandas. `df.apply(fn, axis=1)` in pandas constructs a Python-level loop that calls `fn` once per row, paying the full cost of the Python interpreter and object-boxing on every call — it's one of the best-known performance traps in pandas, and the standard advice is "avoid `.apply(axis=1)` at all costs, vectorize instead." `ByRow` in Julia compiles down to a specialized, type-stable loop with none of that overhead — a `ByRow` transform over a million rows runs orders of magnitude faster than the pandas `.apply(axis=1)` equivalent, and comparably to (often faster than) a hand-vectorized NumPy expression, because there's no vectorization tax to pay in the first place: scalar Julia code already runs at native speed.
+
+## 8. Sorting
+
+```julia
+sort(df, :age)                     # ascending
+sort(df, :age, rev=true)           # descending
+sort(df, [:dept, order(:age, rev=true)])   # multi-column, mixed direction
+sort!(df, :salary)                  # in place
+```
+
+```python
+df.sort_values("age")
+df.sort_values("age", ascending=False)
+df.sort_values(["dept", "age"], ascending=[True, False])
+df.sort_values("salary", inplace=True)
+```
+
+```r
+df %>% arrange(age)
+df %>% arrange(desc(age))
+df %>% arrange(dept, desc(age))
+```
+
+## 9. Handling missing data
+
+Julia has a dedicated, first-class `missing` value with its own type, `Missing`, that lives in the type system rather than being reused from a numeric sentinel. A column that can contain missing values has element type `Union{T, Missing}` — e.g. `Union{Float64, Missing}` — which means Julia's compiler *knows statically* that missingness is possible and generates code that handles it correctly, rather than relying on `NaN` (a valid float bit-pattern being overloaded to also mean "no data," which is exactly the ambiguity pandas 3.0's new nullable dtypes and `pd.NA` are trying to fix).
+
+```julia
+using Statistics
+
+df5 = DataFrame(x = [1, 2, missing, 4], y = [missing, 2.0, 3.0, 4.0])
+
+ismissing.(df5.x)             # BitVector: which entries are missing
+skipmissing(df5.y) |> mean     # mean, ignoring missing values
+coalesce.(df5.x, 0)             # replace missing with 0
+dropmissing(df5)                 # drop any row containing missing
+dropmissing(df5, :x)             # drop rows missing in column :x only
+allowmissing(df)                  # widen columns to permit missing
+disallowmissing(df5, :x)          # error if any missing remains, else narrow type
+```
+
+```python
+import numpy as np
+df5 = pd.DataFrame({"x": [1, 2, np.nan, 4], "y": [np.nan, 2.0, 3.0, 4.0]})
+
+df5["x"].isna()
+df5["y"].mean(skipna=True)          # skipna=True is the default
+df5["x"].fillna(0)
+df5.dropna()
+df5.dropna(subset=["x"])
+# pandas 3.0's nullable dtypes ("Int64", "Float64", pd.NA) narrow this gap,
+# but the classic np.nan-in-a-float64-array pattern above is still ubiquitous
+```
+
+```r
+df5 <- data.frame(x = c(1, 2, NA, 4), y = c(NA, 2.0, 3.0, 4.0))
+is.na(df5$x)
+mean(df5$y, na.rm = TRUE)
+tidyr::replace_na(df5$x, 0)
+na.omit(df5)
+```
+
+R's `NA` is actually the closest conceptual sibling to Julia's `missing` — both are genuine sentinel values distinct from any numeric encoding, and both propagate through arithmetic by default (`NA + 1` is `NA`; `missing + 1` is `missing`). NumPy's classic `np.nan`, by contrast, is just a special IEEE-754 float, which is why it can't represent "missing integer" without silently upcasting the whole column to `float64` — a well-known pandas gotcha that Julia's `Union{Int64, Missing}` sidesteps entirely by keeping the column's true integer values as `Int64` and only paying a small tag-check cost for the union.
+
+## 10. Group-by and aggregation (split-apply-combine)
+
+```julia
+using Statistics
+
+gdf = groupby(df, :dept)                     # a GroupedDataFrame — lazy, no computation yet
+
+combine(gdf, nrow => :n)                                # count per group
+combine(gdf, :salary => mean => :avg_salary)             # one aggregation
+combine(gdf, :salary => mean => :avg_salary,
+             :age => maximum => :max_age)                 # several at once
+combine(gdf, :salary => (s -> (mean=mean(s), std=std(s))) => AsTable)  # multiple outputs
+combine(gdf) do sub
+    (avg_salary = mean(sub.salary), n = nrow(sub))         # do-block form
+end
+
+transform(gdf, :salary => mean => :dept_avg_salary)        # keep all rows, add group stat
+```
+
+```python
+gdf = df.groupby("dept")
+
+gdf.size().rename("n")
+gdf["salary"].mean().rename("avg_salary")
+gdf.agg(avg_salary=("salary", "mean"), max_age=("age", "max"))
+gdf["salary"].agg(["mean", "std"])
+gdf.apply(lambda sub: pd.Series({"avg_salary": sub["salary"].mean(), "n": len(sub)}))
+
+df["dept_avg_salary"] = gdf["salary"].transform("mean")
+```
+
+```r
+gdf <- df %>% group_by(dept)
+gdf %>% summarise(n = n())
+gdf %>% summarise(avg_salary = mean(salary))
+gdf %>% summarise(avg_salary = mean(salary), max_age = max(age))
+df <- df %>% group_by(dept) %>% mutate(dept_avg_salary = mean(salary))
+```
+
+Both DataFrames.jl and pandas split the work into the same three logical phases — split, apply, combine — but the ergonomics differ in a telling way: DataFrames.jl's `combine` accepts the same `col => fn => name` mini-language you already learned for `select`/`transform` in Section 7, so there's exactly one syntax to internalize for "apply a function to columns and name the result," whether or not grouping is involved. pandas has a comparatively larger surface area here — `.agg()`, named aggregation tuples, `.apply()`, and `.transform()` each behave subtly differently around output shape and index alignment, which is a recurring source of "why did this return a Series instead of a DataFrame" confusion for intermediate pandas users.
+
+## 11. Joining DataFrames
+
+```julia
+depts = DataFrame(dept = ["Eng", "Sales", "Ops"], budget = [500_000, 200_000, 150_000])
+
+innerjoin(df, depts, on = :dept)
+leftjoin(df, depts, on = :dept)
+rightjoin(df, depts, on = :dept)
+outerjoin(df, depts, on = :dept)
+semijoin(df, depts, on = :dept)     # rows in df that have a match, no new columns
+antijoin(df, depts, on = :dept)      # rows in df with NO match
+crossjoin(select(df, :name), select(depts, :dept))   # every combination
+
+innerjoin(df, depts, on = :dept, makeunique = true)   # disambiguate clashing names
+```
+
+```python
+depts = pd.DataFrame({"dept": ["Eng", "Sales", "Ops"], "budget": [500_000, 200_000, 150_000]})
+
+pd.merge(df, depts, on="dept", how="inner")
+pd.merge(df, depts, on="dept", how="left")
+pd.merge(df, depts, on="dept", how="right")
+pd.merge(df, depts, on="dept", how="outer")
+df[df["dept"].isin(depts["dept"])]                       # semi-join equivalent
+df[~df["dept"].isin(depts["dept"])]                       # anti-join equivalent
+df[["name"]].merge(depts[["dept"]], how="cross")
+
+pd.merge(df, depts, on="dept", suffixes=("", "_dept"))
+```
+
+```r
+inner_join(df, depts, by = "dept")
+left_join(df, depts, by = "dept")
+right_join(df, depts, by = "dept")
+full_join(df, depts, by = "dept")
+semi_join(df, depts, by = "dept")
+anti_join(df, depts, by = "dept")
+```
+
+DataFrames.jl having first-class `semijoin`/`antijoin` functions is a nice ergonomic win over pandas, which requires the `isin` workaround shown above — this is one of a handful of places where DataFrames.jl's API was deliberately designed with `dplyr`'s vocabulary in mind, and it shows.
+
+## 12. Reshaping: wide ↔ long
+
+```julia
+wide = DataFrame(id = [1, 2], math = [90, 85], science = [88, 92])
+
+long = stack(wide, [:math, :science])                    # wide -> long
+long = stack(wide, [:math, :science], variable_name=:subject, value_name=:score)
+
+back_to_wide = unstack(long, :id, :subject, :score)        # long -> wide
+```
+
+```python
+wide = pd.DataFrame({"id": [1, 2], "math": [90, 85], "science": [88, 92]})
+
+long = wide.melt(id_vars="id", value_vars=["math", "science"])
+long = wide.melt(id_vars="id", value_vars=["math", "science"],
+                  var_name="subject", value_name="score")
+
+back_to_wide = long.pivot(index="id", columns="subject", values="score").reset_index()
+```
+
+```r
+long <- wide %>% pivot_longer(cols = c(math, science), names_to = "subject", values_to = "score")
+back_to_wide <- long %>% pivot_wider(names_from = subject, values_from = score)
+```
+
+The naming is a nice illustration of the ecosystem's history: `stack`/`unstack` are DataFrames.jl's original terms (shared with pandas' own lower-level `.stack()`/`.unstack()` methods, which operate on MultiIndex levels rather than columns); `melt`/`pivot` are pandas' higher-level, more commonly-used equivalents; and `pivot_longer`/`pivot_wider` are the modern `tidyr` (R) names that superseded the older `gather`/`spread`. All three ecosystems converged on the same two operations because the wide/long duality is fundamental to tabular data, not a design choice any one of them invented.
+
+## 13. Fluent chains with DataFramesMeta.jl
+
+Base DataFrames.jl is intentionally low-level and unopinionated — much like base pandas. For a `dplyr`-style fluent pipeline, the companion package `DataFramesMeta.jl` adds macros that let you refer to columns directly by `:column_name` (no `df.` prefix repetition) and chain steps with `@chain`:
+
+```julia
+using DataFramesMeta
+
+result = @chain df begin
+    @rsubset :age > 25                              # row-wise filter
+    @rtransform :bonus = :salary * 0.10               # row-wise new column
+    @groupby :dept
+    @combine :avg_salary = mean(:salary), :n = length(:salary)
+    @orderby -:avg_salary                              # descending
+end
+```
+
+```python
+result = (
+    df
+    .query("age > 25")
+    .assign(bonus=lambda d: d["salary"] * 0.10)
+    .groupby("dept")
+    .agg(avg_salary=("salary", "mean"), n=("salary", "size"))
+    .reset_index()
+    .sort_values("avg_salary", ascending=False)
+)
+```
+
+```r
+result <- df %>%
+  filter(age > 25) %>%
+  mutate(bonus = salary * 0.10) %>%
+  group_by(dept) %>%
+  summarise(avg_salary = mean(salary), n = n()) %>%
+  arrange(desc(avg_salary))
+```
+
+If you've ever written a `dplyr` pipeline, `@chain` will feel immediately familiar — that's deliberate; DataFramesMeta.jl's macros were explicitly designed to close the ergonomic gap with `dplyr`, which is widely regarded (including by many pandas users) as the more pleasant syntax for multi-step data wrangling. The crucial difference from pandas' method-chaining style is that `@rsubset`/`@rtransform` compile down to the same type-specialized, allocation-free loops as everything else in this post — the readability of `dplyr` with none of the interpreter overhead of `.apply()`.
+
+## 14. Categorical data
+
+```julia
+using CategoricalArrays
+
+df.dept = categorical(df.dept)
+levels(df.dept)                    # unique levels
+df.dept = categorical(df.dept, ordered=true, levels=["Ops", "Sales", "Eng"])
+isordered(df.dept)
+```
+
+```python
+df["dept"] = df["dept"].astype("category")
+df["dept"].cat.categories
+df["dept"] = df["dept"].cat.reorder_categories(["Ops", "Sales", "Eng"], ordered=True)
+df["dept"].cat.ordered
+```
+
+Both `CategoricalArrays.jl` and pandas' `category` dtype store data as compact integer codes plus a levels/categories vector — same idea, same memory win for low-cardinality string columns, converging designs.
+
+## 15. Reading and writing CSV / Parquet
+
+```julia
+using CSV
+
+df = CSV.read("employees.csv", DataFrame)
+CSV.write("employees_out.csv", df)
+
+using Parquet2   # or ParquetFiles.jl / Arrow.jl for columnar formats
+using Arrow
+Arrow.write("employees.arrow", df)
+df2 = DataFrame(Arrow.Table("employees.arrow"))
+```
+
+```python
+df = pd.read_csv("employees.csv")
+df.to_csv("employees_out.csv", index=False)
+
+df.to_parquet("employees.parquet")
+df2 = pd.read_parquet("employees.parquet")
+```
+
+`CSV.jl` is itself a case study in Julia's performance story: it's a multi-threaded, type-inferring parser written entirely in Julia (no C extension underneath, unlike pandas' CSV reader which leans on a compiled C/Cython parser) and is routinely competitive with or faster than pandas' `read_csv` on wide, large files, particularly when multithreading is enabled — a good demonstration that "written in Julia" and "fast" are not in tension the way "written in Python" and "fast" usually are.
+
+## 16. Performance deep dive: why Julia is fast here
+
+It's worth being precise about *why* Julia wins the benchmarks it wins, rather than treating "Julia is fast" as a slogan.
+
+**Vectorization is a workaround in pandas; it's optional in Julia.** In pandas/NumPy, if you write a Python `for` loop over rows, you pay the Python interpreter's per-iteration overhead (attribute lookups, dynamic type checks, object boxing) on every single row — which is why the standard pandas advice is "always vectorize." Vectorized NumPy is fast because it hands the loop to pre-compiled C kernels and skips the Python interpreter entirely. In Julia, a hand-written `for` loop is *already* compiled machine code with static types — there's no interpreter to skip, so there's no vectorization requirement in the first place. `ByRow` (Section 7) is really just syntactic sugar for a compiled loop, not a performance trick.
+
+**Type stability compounds across an entire pipeline.** A "type-stable" Julia function is one where the compiler can infer a single, concrete return type for every input type — this lets the compiler generate one tight, unboxed machine-code path with no runtime type dispatch inside the function body. A well-written DataFrames.jl pipeline (concrete column types, no `Any` columns, no unnecessary `Union{T, Missing}` where missingness is never actually used) stays type-stable end to end, so chained operations don't reintroduce per-step interpreter overhead the way chained pandas `.apply()` calls do.
+
+**No hidden object-dtype tax.** A pandas column that mixes types, or that pandas fails to infer cleanly, silently falls back to `dtype: object` — a column of boxed Python objects with none of NumPy's speed. DataFrames.jl columns keep a concrete Julia type unless you explicitly opt into `Any`, so this silent performance cliff mostly doesn't exist; a `Vector{String}` behaves nothing like pandas' historical `object`-dtype string columns performance-wise (though pandas 3.0's new default `str` dtype, discussed below, closes this specific gap considerably).
+
+A representative (illustrative, not authoritative — always benchmark on your own hardware and data) micro-benchmark pattern:
+
+```julia
+using BenchmarkTools, DataFrames
+
+n = 10_000_000
+big = DataFrame(x = rand(n), y = rand(1:100, n))
+
+@btime transform($big, [:x, :y] => ByRow((x, y) -> x^2 + sqrt(y)) => :z);
+```
+
+```python
+import timeit
+import numpy as np, pandas as pd
+
+n = 10_000_000
+big = pd.DataFrame({"x": np.random.rand(n), "y": np.random.randint(1, 100, n)})
+
+# Fair comparison: vectorized pandas/NumPy, not .apply(axis=1)
+%timeit big["z"] = big["x"] ** 2 + np.sqrt(big["y"])
+
+# The trap: row-wise .apply — this is what people write instinctively,
+# and it is 50-100x+ slower than the vectorized line above
+%timeit big.apply(lambda r: r["x"] ** 2 + np.sqrt(r["y"]), axis=1)
+```
+
+The honest summary: **Julia's `ByRow` loop and vectorized NumPy/pandas land in the same performance ballpark** for expressions NumPy can vectorize cleanly — NumPy's C kernels are genuinely fast, and Julia isn't "beating math." Where Julia pulls decisively ahead is exactly the case NumPy *can't* vectorize: branching logic, early returns, stateful iteration (e.g., a computation where row `i` depends on the *result* for row `i-1`), or calls to arbitrary user-defined functions and external libraries — all of which force pandas back to slow, interpreted `.apply()`, while Julia just keeps compiling and running native code either way.
+
+## 17. Julia vs pandas vs R: the honest comparison
+
+|                                | **Julia (DataFrames.jl)** | **Python (pandas + NumPy)** | **R (data.frame / dplyr)** |
+|---|---|---|---|
+| Row-wise custom logic | Compiled, fast by default | Slow via `.apply`; needs Cython/Numba to fix | Slow via `apply`/`sapply`; needs Rcpp to fix |
+| Vectorized numeric ops | Fast (broadcast fusion) | Fast (NumPy C kernels) | Fast for base ops; `data.table` for scale |
+| Missing-data model | `missing`, first-class in the type system | Historically `NaN`/object; pandas 3.0 nullable dtypes narrow the gap | `NA`, first-class, closest to Julia's model |
+| Startup / "time to first plot" | Noticeable JIT compile latency on first call | Near-instant | Near-instant |
+| Package ecosystem breadth | Smaller, growing fast | Enormous (esp. ML/deep learning, viz) | Enormous for statistics specifically |
+| Multiple dispatch / extensibility | Native language feature — packages compose cleanly | Single dispatch (methods on classes); duck typing | S3/S4/R6 — several competing systems |
+| Learning curve for data folks | New syntax, but very readable | Most widely taught; huge tutorial corpus | Purpose-built for stats; `dplyr` grammar is beloved |
+| Threading / parallelism | Built into the language (`Threads.@threads`, no GIL) | Constrained by the GIL for pure-Python code | Largely single-threaded outside specific packages |
+| Production deployment story | Compiles to a single binary-ish artifact; fewer runtime deps | Mature (Docker, serverless, huge hiring pool) | Mature for reporting/Shiny; less common for services |
+| Fastest path to "it just works" today | If your workload needs custom logic + scale | If your workload is standard ML/viz/glue code | If your workload is classical statistics |
+
+A few of these deserve unpacking rather than just a table cell:
+
+**Compile latency ("time to first plot") is real and worth taking seriously.** The first time you call a Julia function with a new combination of argument types, the JIT has to compile it, which can take anywhere from tens of milliseconds to a few seconds for complex generic code. For long-running analyses or services this cost is amortized to nothing; for a quick one-off script or an interactive REPL session where you're iterating rapidly, it's a genuinely annoying tax that pandas simply doesn't have. Julia 1.9+ made major strides here (package precompilation caching), but it hasn't fully disappeared, and pretending otherwise would be dishonest.
+
+**Pandas' ecosystem gravity is a real advantage, not just inertia.** If your pipeline needs to hand off to scikit-learn, PyTorch, or a dozen other Python-native ML libraries, staying in pandas avoids a language boundary. Julia has its own capable ML ecosystem (`MLJ.jl`, `Flux.jl`), but it doesn't have the sheer breadth of pre-trained models, tutorials, and Stack Overflow answers that Python has accumulated.
+
+**`dplyr`'s grammar is genuinely excellent, and DataFramesMeta.jl borrows from it for good reason.** R's `tidyverse` philosophy — a small set of verbs (`filter`, `mutate`, `select`, `summarise`, `arrange`) composed with the pipe — is widely considered one of the most readable data-manipulation grammars in any language. DataFrames.jl's core API is closer to pandas/NumPy in spirit; DataFramesMeta.jl is the layer that brings `dplyr`'s ergonomics to Julia specifically because that grammar was worth borrowing.
+
+**"Julia is faster" is a claim about the ceiling, not every workload.** For workloads that vectorize cleanly in NumPy — the majority of everyday data-wrangling code — pandas and Julia perform comparably, because both are ultimately running compiled numeric kernels. Julia's advantage shows up specifically in the workloads pandas users have learned to route *around* pandas for: heavy custom logic, simulation, iterative algorithms, and anything that would otherwise require dropping into Cython or Numba.
+
+## 18. When each tool actually wins
+
+Rather than a blanket recommendation, here's a practical decision guide:
+
+**Reach for pandas/NumPy when** your pipeline is mostly standard vectorized transforms and joins, you need to interoperate with the Python ML/deep-learning ecosystem, your team already knows Python, or you need the fastest path to a working prototype with maximum library support.
+
+**Reach for R/dplyr/data.table when** the work is fundamentally statistical (hypothesis testing, classical modeling, publication-quality statistical graphics with `ggplot2`), you're producing reports (R Markdown/Quarto is excellent for this), or your collaborators are statisticians who already think in R.
+
+**Reach for Julia/DataFrames.jl when** your pipeline includes custom row-wise or iterative logic that would otherwise force you into Cython/Numba, you're doing scientific computing, simulation, or numerical optimization alongside your data wrangling (Julia's broader ecosystem — `DifferentialEquations.jl`, `JuMP.jl`, `Turing.jl` — is a major draw here), you need real multithreading without GIL headaches, or you want one language to cover exploratory analysis *and* the performance-critical production version of that same code.
+
+None of these are exclusive — plenty of teams use Julia for the numerically heavy core of a pipeline and Python for the surrounding glue and deployment tooling, which is a perfectly reasonable way to get the best of both.
+
+## 19. Further resources
+
+- [DataFrames.jl official documentation](https://dataframes.juliadata.org/stable/)
+- [DataFramesMeta.jl documentation](https://juliadata.org/DataFramesMeta.jl/stable/)
+- [DataFrames.jl split-apply-combine guide](https://dataframes.juliadata.org/stable/man/split_apply_combine/)
+- [DataFrames.jl joins guide](https://dataframes.juliadata.org/stable/man/joins/)
+- [Julia Data Science (free online book)](https://juliadatascience.io/)
+- [pandas 3.0 release notes](https://pandas.pydata.org/docs/whatsnew/v3.0.0.html)
+
+---
+
+*If this guide was useful, the fastest way to internalize it is to take a CSV you already know well in pandas and reproduce three or four of your usual transformations in DataFrames.jl. The syntax differences are small; the mental model — column-oriented, type-aware, dispatch-driven — is the part worth building intuition for.*
