@@ -16,6 +16,7 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
   const [status, setStatus] = useState<Status>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [output, setOutput] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]);
   const [isError, setIsError] = useState(false);
   const [copied, setCopied] = useState(false);
   const runtime = useRef(getRuntime(lang)).current;
@@ -34,6 +35,7 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
 
   async function handleRun() {
     setOutput(null);
+    setImages([]);
     setIsError(false);
     try {
       if (!runtime.isLoaded()) {
@@ -43,7 +45,8 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
       setStatus("running");
       const result = await runtime.run(code);
       setIsError(!result.ok);
-      setOutput(result.ok ? result.stdout || "(no output)" : result.error ?? "Unknown error");
+      setOutput(result.ok ? result.stdout || (result.images?.length ? null : "(no output)") : result.error ?? "Unknown error");
+      setImages(result.images ?? []);
     } catch (err) {
       setIsError(true);
       setOutput(err instanceof Error ? err.message : String(err));
@@ -93,6 +96,18 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
         >
           {output}
         </pre>
+      )}
+      {images.length > 0 && (
+        <div className="code-runner__figures">
+          {images.map((image, index) => (
+            <img
+              key={index}
+              className="code-runner__figure"
+              src={`data:image/png;base64,${image}`}
+              alt={`Figure ${index + 1}`}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

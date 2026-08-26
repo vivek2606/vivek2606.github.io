@@ -9,6 +9,8 @@ export interface RunResult {
   ok: boolean;
   stdout: string;
   error?: string;
+  /** Base64-encoded PNGs of any matplotlib figures left open after the run. */
+  images?: string[];
 }
 
 export interface LanguageRuntime {
