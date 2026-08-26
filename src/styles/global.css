@@ -975,6 +975,11 @@ pre:hover .copy-code-button,
   border-radius: var(--radius);
 }
 
+.code-runner__bokeh {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 /* Home page layout: main column + sidebar (tag cloud, calendar, music) */
 
 .home-layout {

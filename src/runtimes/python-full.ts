@@ -1,4 +1,4 @@
-import type { LanguageRuntime, RunResult } from "./types";
+import type { LanguageRuntime, RunResult, BokehPayload } from "./types";
 
 // Unlike PythonRuntime (bare stdlib, fully self-hosted from public/pyodide/),
 // this variant loads NumPy/Pandas/Matplotlib/scikit-learn on demand from
@@ -81,9 +81,36 @@ def __capture_figures():
 __capture_figures()
 `;
 
+// Bokeh has no equivalent of matplotlib's "currently open figures" registry
+// outside a running Bokeh server, so figures are found by scanning the
+// globals left behind by the user's code for anything Plot-like (figure()
+// returns a Plot subclass) — any such variable gets rendered, no special
+// naming convention required. json_item() is Bokeh's own documented
+// mechanism for embedding a plot outside of output_file()/show(): it
+// returns a small JSON-safe dict that BokehJS's embed_item() can render
+// into a target <div> without a Jupyter/server connection.
+const BOKEH_CAPTURE = `
+import json as _json
+def __capture_bokeh():
+    try:
+        import bokeh
+        from bokeh.embed import json_item as _json_item
+        from bokeh.models import Plot as _BokehPlotBase
+    except ImportError:
+        return None
+    items = []
+    for _name, _val in list(globals().items()):
+        if isinstance(_val, _BokehPlotBase):
+            items.append(_json_item(_val, _name))
+    if not items:
+        return None
+    return _json.dumps({"version": bokeh.__version__, "items": items})
+__capture_bokeh()
+`;
+
 class PythonFullRuntime implements LanguageRuntime {
   id = "python-full";
-  label = "Python (NumPy/Pandas/Matplotlib/scikit-learn)";
+  label = "Python (NumPy/Pandas/scikit-learn/Bokeh)";
 
   isLoaded(): boolean {
     return pyodide !== null;
@@ -134,7 +161,17 @@ class PythonFullRuntime implements LanguageRuntime {
           images = converted as string[];
         }
       }
-      return { ok: true, stdout, images };
+      let bokeh: BokehPayload | undefined;
+      if (/\bbokeh\b/.test(code)) {
+        // A plain JSON string round-trips through the FFI boundary as a
+        // regular JS string with no PyProxy involved, unlike a Python
+        // list/dict return value — simplest thing that works here.
+        const raw = await pyodide.runPythonAsync(BOKEH_CAPTURE);
+        if (typeof raw === "string") {
+          bokeh = JSON.parse(raw) as BokehPayload;
+        }
+      }
+      return { ok: true, stdout, images, bokeh };
     } catch (err) {
       return {
         ok: false,

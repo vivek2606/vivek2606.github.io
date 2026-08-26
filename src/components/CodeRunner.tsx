@@ -1,7 +1,9 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Editor from "react-simple-code-editor";
 import { getRuntime } from "../runtimes";
+import type { BokehPayload } from "../runtimes/types";
 import { highlight } from "../lib/prism-languages";
+import { loadBokehJs } from "../lib/bokeh-loader";
 import "prismjs/themes/prism-tomorrow.css";
 
 interface CodeRunnerProps {
@@ -17,10 +19,36 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
   const [statusMessage, setStatusMessage] = useState("");
   const [output, setOutput] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
+  const [bokeh, setBokeh] = useState<BokehPayload | null>(null);
+  const [bokehStatus, setBokehStatus] = useState<"idle" | "loading" | "error">("idle");
   const [isError, setIsError] = useState(false);
   const [copied, setCopied] = useState(false);
   const runtime = useRef(getRuntime(lang)).current;
   const outputId = useId();
+  const bokehMountId = useId();
+
+  useEffect(() => {
+    if (!bokeh) return;
+    let cancelled = false;
+    setBokehStatus("loading");
+    loadBokehJs(bokeh.version)
+      .then(() => {
+        if (cancelled) return;
+        bokeh.items.forEach((item, index) => {
+          const targetId = `${bokehMountId}-${index}`;
+          if (document.getElementById(targetId)) {
+            window.Bokeh?.embed.embed_item(item, targetId);
+          }
+        });
+        setBokehStatus("idle");
+      })
+      .catch(() => {
+        if (!cancelled) setBokehStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bokeh, bokehMountId]);
 
   async function handleCopy() {
     try {
@@ -36,6 +64,7 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
   async function handleRun() {
     setOutput(null);
     setImages([]);
+    setBokeh(null);
     setIsError(false);
     try {
       if (!runtime.isLoaded()) {
@@ -45,8 +74,10 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
       setStatus("running");
       const result = await runtime.run(code);
       setIsError(!result.ok);
-      setOutput(result.ok ? result.stdout || (result.images?.length ? null : "(no output)") : result.error ?? "Unknown error");
+      const hasVisuals = Boolean(result.images?.length) || Boolean(result.bokeh);
+      setOutput(result.ok ? result.stdout || (hasVisuals ? null : "(no output)") : result.error ?? "Unknown error");
       setImages(result.images ?? []);
+      setBokeh(result.bokeh ?? null);
     } catch (err) {
       setIsError(true);
       setOutput(err instanceof Error ? err.message : String(err));
@@ -106,6 +137,17 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
               src={`data:image/png;base64,${image}`}
               alt={`Figure ${index + 1}`}
             />
+          ))}
+        </div>
+      )}
+      {bokeh && (
+        <div className="code-runner__figures">
+          {bokehStatus === "loading" && <p className="code-runner__status">Loading BokehJS…</p>}
+          {bokehStatus === "error" && (
+            <p className="code-runner__status">Failed to load BokehJS from the CDN.</p>
+          )}
+          {bokeh.items.map((_, index) => (
+            <div key={index} id={`${bokehMountId}-${index}`} className="code-runner__bokeh" />
           ))}
         </div>
       )}

@@ -1,6 +1,6 @@
 ---
 title: "Demystifying Logistic Regression: From Mathematics to Production-Ready Python"
-description: "A comprehensive guide to Logistic Regression covering math fundamentals, loss functions, regularization (L1/L2), and complete Python implementations with NumPy, Pandas, Matplotlib, and Scikit-Learn."
+description: "A comprehensive guide to Logistic Regression covering math fundamentals, loss functions, regularization (L1/L2), and a complete, interactively-plotted Python implementation with NumPy, Pandas, Scikit-Learn, and Bokeh."
 date: 2026-08-26
 tags: ["machine-learning", "python", "data-science", "scikit-learn", "algorithms"]
 author: "AI & Data Science Team"
@@ -102,25 +102,26 @@ $$
 
 ## 4. End-to-End Implementation in Python
 
-Here is a full end-to-end Python pipeline using **NumPy**, **Pandas**, **Matplotlib**, and **Scikit-Learn**.
+Here is a full end-to-end Python pipeline using **NumPy**, **Pandas**, **Scikit-Learn**, and **Bokeh** for the plots.
 
 This one runs right here — press **Run** below. Unlike the other runnable
 blocks on this blog, which use a bare, fully self-hosted Pyodide with no
-extra packages, this one pulls NumPy, Pandas, Matplotlib, and scikit-learn
-from [Pyodide's own CDN](https://pyodide.org) on demand (first run only,
-cached after — expect a sizeable download, upwards of 100 MB, since that's
-the actual size of a WASM-compiled SciPy/scikit-learn stack). Matplotlib's
-figures render as static images below the output, the same way they would
-in a Jupyter notebook.
+extra packages, this one pulls NumPy, Pandas, scikit-learn, and Bokeh from
+[Pyodide's own CDN](https://pyodide.org) on demand (first run only, cached
+after — expect a sizeable download, upwards of 100 MB, since that's the
+actual size of a WASM-compiled SciPy/scikit-learn stack). Bokeh's plots are
+genuinely interactive here — pan, zoom, and hover tooltips all work — via
+[BokehJS](https://docs.bokeh.org/en/latest/docs/user_guide/output/embedding.html)
+rendering the same JSON spec Bokeh would otherwise hand to a notebook.
 
 <CodeRunner client:only="react" lang="python-full" code={`import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, RocCurveDisplay
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve
+from bokeh.plotting import figure
 
 # ==============================================================================
 # 1. Dataset Generation & Exploration
@@ -175,37 +176,47 @@ print(classification_report(y_test, y_pred))
 print(f"ROC-AUC Score: {roc_auc_score(y_test, y_pred_proba):.4f}")
 
 # ==============================================================================
-# 5. Visualization: Decision Boundary & ROC Curve
+# 5. Visualization: Decision Boundary & ROC Curve (Bokeh, interactive)
 # ==============================================================================
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-# Decision Boundary Mesh
+# Decision Boundary Mesh — coarser than a typical matplotlib contourf grid
+# (0.08 instead of 0.02) since every cell becomes its own rendered glyph.
 x_min, x_max = X_train_scaled[:, 0].min() - 1, X_train_scaled[:, 0].max() + 1
 y_min, y_max = X_train_scaled[:, 1].min() - 1, X_train_scaled[:, 1].max() + 1
-xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02), np.arange(y_min, y_max, 0.02))
+xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.08), np.arange(y_min, y_max, 0.08))
 
 Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
-Z = Z.reshape(xx.shape)
+mesh_colors = np.where(Z == 1, '#f4a582', '#92c5de')
 
-axes[0].contourf(xx, yy, Z, alpha=0.25, cmap=plt.cm.coolwarm)
-scatter = axes[0].scatter(
-    X_test_scaled[:, 0],
-    X_test_scaled[:, 1],
-    c=y_test,
-    cmap=plt.cm.coolwarm,
-    edgecolors='k',
-    alpha=0.8
+decision_boundary = figure(
+    title="Decision Boundary (Test Set)",
+    x_axis_label="Feature 1 (Standardized)",
+    y_axis_label="Feature 2 (Standardized)",
+    width=460,
+    height=400,
 )
-axes[0].set_title("Decision Boundary (Test Set)")
-axes[0].set_xlabel("Feature 1 (Standardized)")
-axes[0].set_ylabel("Feature 2 (Standardized)")
+decision_boundary.rect(
+    x=xx.ravel(), y=yy.ravel(), width=0.08, height=0.08,
+    fill_color=mesh_colors, fill_alpha=0.35, line_color=None,
+)
+point_colors = np.where(y_test == 1, '#b2182b', '#2166ac')
+decision_boundary.scatter(
+    X_test_scaled[:, 0], X_test_scaled[:, 1],
+    size=7, fill_color=point_colors, line_color='black', line_width=0.5,
+)
 
 # ROC Curve
-RocCurveDisplay.from_estimator(model, X_test_scaled, y_test, ax=axes[1])
-axes[1].plot([0, 1], [0, 1], 'k--', label="Random Chance (AUC = 0.50)")
-axes[1].set_title("Receiver Operating Characteristic (ROC)")
-axes[1].legend(loc="lower right")
+fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+auc = roc_auc_score(y_test, y_pred_proba)
 
-plt.tight_layout()
-plt.show()
+roc_plot = figure(
+    title="Receiver Operating Characteristic (ROC)",
+    x_axis_label="False Positive Rate",
+    y_axis_label="True Positive Rate",
+    width=460,
+    height=400,
+)
+roc_plot.line(fpr, tpr, line_width=2, color='#b2182b', legend_label=f"Model (AUC = {auc:.2f})")
+roc_plot.line([0, 1], [0, 1], line_dash='dashed', color='gray', legend_label="Random Chance (AUC = 0.50)")
+roc_plot.legend.location = "bottom_right"
 `} />

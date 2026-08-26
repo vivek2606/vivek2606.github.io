@@ -5,12 +5,20 @@
  * (R via webR, etc.) means writing one new file and registering it below —
  * no changes to the editor/UI component itself.
  */
+/** Output of bokeh.embed.json_item(), ready for BokehJS's embed_item(). */
+export interface BokehPayload {
+  version: string;
+  items: Record<string, unknown>[];
+}
+
 export interface RunResult {
   ok: boolean;
   stdout: string;
   error?: string;
   /** Base64-encoded PNGs of any matplotlib figures left open after the run. */
   images?: string[];
+  /** Any Bokeh plot objects left as globals after the run. */
+  bokeh?: BokehPayload;
 }
 
 export interface LanguageRuntime {
