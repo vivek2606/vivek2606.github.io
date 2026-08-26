@@ -1,0 +1,51 @@
+---
+import { getCollection, type CollectionEntry } from "astro:content";
+
+const posts = await getCollection("blog");
+const now = new Date();
+const year = now.getFullYear();
+const month = now.getMonth();
+
+const postsByDay = new Map<number, CollectionEntry<"blog">[]>();
+for (const post of posts) {
+  const d = post.data.date;
+  if (d.getFullYear() === year && d.getMonth() === month) {
+    const day = d.getDate();
+    postsByDay.set(day, [...(postsByDay.get(day) ?? []), post]);
+  }
+}
+
+const firstWeekday = new Date(year, month, 1).getDay();
+const daysInMonth = new Date(year, month + 1, 0).getDate();
+const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+const cells: Array<number | null> = [
+  ...Array(firstWeekday).fill(null),
+  ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+];
+const weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+---
+
+<div class="widget calendar">
+  <h2 class="widget__heading">{monthLabel}</h2>
+  <div class="calendar__grid">
+    {weekdayLabels.map((label) => (
+      <span class="calendar__dow">{label}</span>
+    ))}
+    {
+      cells.map((day) => {
+        if (day === null) return <span class="calendar__cell calendar__cell--empty" />;
+        const dayPosts = postsByDay.get(day);
+        if (!dayPosts) return <span class="calendar__cell">{day}</span>;
+        return (
+          <a
+            class="calendar__cell calendar__cell--post"
+            href={`/blog/${dayPosts[0].slug}/`}
+            title={dayPosts.map((p) => p.data.title).join(", ")}
+          >
+            {day}
+          </a>
+        );
+      })
+    }
+  </div>
+</div>

@@ -1,0 +1,41 @@
+---
+import { getCollection } from "astro:content";
+
+const posts = await getCollection("blog");
+const counts = new Map<string, number>();
+for (const post of posts) {
+  for (const tag of post.data.tags) {
+    counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+}
+const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+const max = Math.max(1, ...entries.map(([, c]) => c));
+const min = Math.min(max, ...entries.map(([, c]) => c));
+
+function weightFor(count: number): number {
+  if (max === min) return 1;
+  return (count - min) / (max - min);
+}
+---
+
+<div class="widget tag-cloud">
+  <h2 class="widget__heading">Tag cloud</h2>
+  {
+    entries.length === 0 ? (
+      <p class="widget__empty">No tags yet.</p>
+    ) : (
+      <div class="tag-cloud__cloud">
+        {entries.map(([tag, count]) => (
+          <a
+            href={`/blog/?tag=${encodeURIComponent(tag)}`}
+            class="tag-cloud__tag"
+            style={`--t: ${weightFor(count).toFixed(2)}`}
+            title={`${count} post${count === 1 ? "" : "s"}`}
+          >
+            {tag}
+          </a>
+        ))}
+      </div>
+    )
+  }
+</div>

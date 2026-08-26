@@ -1,0 +1,40 @@
+---
+// Apple Music's official embed works by swapping music.apple.com for
+// embed.music.apple.com in a normal playlist/album share URL — no API key
+// or developer token needed for a plain embedded player.
+interface Props {
+  playlistUrl?: string;
+}
+const { playlistUrl } = Astro.props;
+
+function toEmbedUrl(url?: string): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "music.apple.com") return null;
+    parsed.hostname = "embed.music.apple.com";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+const embedUrl = toEmbedUrl(playlistUrl);
+---
+
+<div class="widget music">
+  <h2 class="widget__heading">Now playing</h2>
+  {
+    embedUrl ? (
+      <iframe
+        allow="autoplay *; encrypted-media *; clipboard-write"
+        frameborder="0"
+        height="175"
+        style="width: 100%; overflow: hidden; border-radius: 10px;"
+        sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+        src={embedUrl}
+      />
+    ) : (
+      <p class="widget__empty">Apple Music playlist coming soon.</p>
+    )
+  }
+</div>

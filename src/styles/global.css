@@ -218,6 +218,21 @@ button {
   margin: 0 0 1rem;
 }
 
+.hero__title--masthead {
+  font-size: 3.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--fg), var(--accent) 140%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (max-width: 640px) {
+  .hero__title--masthead {
+    font-size: 2.5rem;
+  }
+}
+
 .hero__tagline {
   color: var(--muted);
   font-size: 1.1rem;
@@ -659,4 +674,102 @@ pre code {
 
 .code-runner__output--error {
   color: var(--error);
+}
+
+/* Home page widgets: tag cloud, archive calendar, music player */
+
+.widget-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 3rem;
+}
+
+@media (max-width: 860px) {
+  .widget-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.widget {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.widget__heading {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+
+.widget__empty {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.tag-cloud__cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  align-items: baseline;
+}
+
+.tag-cloud__tag {
+  text-decoration: none;
+  color: var(--accent);
+  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: calc(0.85rem + var(--t, 0) * 0.9rem);
+  opacity: calc(0.6 + var(--t, 0) * 0.4);
+  line-height: 1.4;
+}
+
+.tag-cloud__tag:hover {
+  text-decoration: underline;
+}
+
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.2rem;
+  text-align: center;
+}
+
+.calendar__dow {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.65rem;
+  padding-bottom: 0.35rem;
+}
+
+.calendar__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.calendar__cell--empty {
+  visibility: hidden;
+}
+
+.calendar__cell--post {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-fg);
+  font-weight: 700;
+}
+
+.calendar__cell--post:hover {
+  transform: scale(1.1);
 }
