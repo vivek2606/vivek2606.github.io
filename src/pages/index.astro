@@ -12,12 +12,12 @@ const posts = (await getCollection("blog")).sort(
 const latestPosts = posts.slice(0, 3);
 ---
 
-<Base title="Vivek's Weblog" description="Personal blog: R, Python, Haskell, and Julia code examples that run inline in the browser." wide>
+<Base title="Vivek's Weblog" description="Personal blog: R, Python, Haskell, and Julia code examples that run inline in the browser." maxWidth="1160px">
   <div class="home-layout">
     <div>
       <section class="hero">
         <div class="hero__glow" aria-hidden="true"></div>
-        <h1 class="hero__title">Vivek 👋</h1>
+        <h1 class="hero__title">Hi, I'm Vivek 👋</h1>
         <p class="hero__tagline">
           Data Science &amp; Deep Learning enthusiast. I write about R, Python, Haskell, and Julia —
           with code examples you can run right here in the browser, no setup required.

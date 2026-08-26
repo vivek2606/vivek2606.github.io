@@ -7,8 +7,10 @@ interface Props {
   title: string;
   description?: string;
   wide?: boolean;
+  maxWidth?: string;
 }
-const { title, description, wide = false } = Astro.props;
+const { title, description, wide = false, maxWidth } = Astro.props;
+const resolvedMaxWidth = maxWidth ?? (wide ? "1080px" : undefined);
 ---
 
 <!doctype html>
@@ -21,7 +23,7 @@ const { title, description, wide = false } = Astro.props;
   </head>
   <body>
     <Navbar />
-    <div class="site" style={wide ? "--site-max-width: 1080px" : undefined}>
+    <div class="site" style={resolvedMaxWidth ? `--site-max-width: ${resolvedMaxWidth}` : undefined}>
       <slot />
     </div>
     <Footer />

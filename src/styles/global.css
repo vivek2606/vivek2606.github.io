@@ -673,7 +673,7 @@ pre code {
 
 .home-layout {
   display: grid;
-  grid-template-columns: 1fr 260px;
+  grid-template-columns: 1fr 360px;
   gap: 3rem;
   align-items: start;
 }
