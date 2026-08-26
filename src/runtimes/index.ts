@@ -1,7 +1,6 @@
 import type { LanguageRuntime } from "./types";
 import { UnsupportedRuntime } from "./types";
 import { pythonRuntime } from "./python";
-import { pythonFullRuntime } from "./python-full";
 import { rRuntime } from "./r";
 
 // Register a runtime here to light up a new language across the whole
@@ -10,7 +9,6 @@ import { rRuntime } from "./r";
 // yet, so they render as "coming soon".
 const registry: Record<string, LanguageRuntime> = {
   python: pythonRuntime,
-  "python-full": pythonFullRuntime,
   r: rRuntime,
   julia: new UnsupportedRuntime(
     "julia",

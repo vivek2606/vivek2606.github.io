@@ -6,8 +6,6 @@ tags: ["machine-learning", "python", "data-science", "scikit-learn", "algorithms
 author: "AI & Data Science Team"
 ---
 
-import CodeRunner from "../../components/CodeRunner.tsx";
-
 Despite the word "regression" in its name, **Logistic Regression** is one of the foundational, interpretable algorithms used for **binary and multi-class classification** tasks in modern machine learning. Whether assessing loan default risk, predicting patient diagnoses, or detecting spam emails, logistic regression serves as a transparent and efficient baseline.
 
 ---
@@ -104,16 +102,14 @@ $$
 
 Here is a full end-to-end Python pipeline using **NumPy**, **Pandas**, **Matplotlib**, and **Scikit-Learn**.
 
-This one runs right here — press **Run** below. Unlike the other runnable
-blocks on this blog, which use a bare, fully self-hosted Pyodide with no
-extra packages, this one pulls NumPy, Pandas, Matplotlib, and scikit-learn
-from [Pyodide's own CDN](https://pyodide.org) on demand (first run only,
-cached after — expect a sizeable download, upwards of 100 MB, since that's
-the actual size of a WASM-compiled SciPy/scikit-learn stack). Matplotlib's
-figures render as static images below the output, the same way they would
-in a Jupyter notebook.
+This one isn't wired into the in-browser runner used elsewhere on this blog — the
+site's Python runtime is bare [Pyodide](https://pyodide.org) (standard library
+only, no plotting canvas), while this script needs NumPy, Pandas, Matplotlib,
+and scikit-learn loaded plus real image output for the plots. Copy it and run
+it locally instead.
 
-<CodeRunner client:only="react" lang="python-full" code={`import numpy as np
+```python
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_classification
@@ -140,7 +136,7 @@ df['Target'] = y_raw
 
 print("--- First 5 Records ---")
 print(df.head())
-print("\\n--- Class Balance ---")
+print("\n--- Class Balance ---")
 print(df['Target'].value_counts(normalize=True))
 
 # ==============================================================================
@@ -170,7 +166,7 @@ y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
 # ==============================================================================
 # 4. Evaluation Metrics
 # ==============================================================================
-print("\\n--- Classification Report ---")
+print("\n--- Classification Report ---")
 print(classification_report(y_test, y_pred))
 print(f"ROC-AUC Score: {roc_auc_score(y_test, y_pred_proba):.4f}")
 
@@ -208,4 +204,4 @@ axes[1].legend(loc="lower right")
 
 plt.tight_layout()
 plt.show()
-`} />
+```

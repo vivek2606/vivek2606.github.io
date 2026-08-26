@@ -7,7 +7,6 @@ import "prismjs/components/prism-haskell";
 // Prism's grammar keys don't all match our own runtime ids 1:1.
 const GRAMMAR_BY_LANG: Record<string, string> = {
   python: "python",
-  "python-full": "python",
   r: "r",
   julia: "julia",
   haskell: "haskell",

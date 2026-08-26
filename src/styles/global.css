@@ -960,21 +960,6 @@ pre:hover .copy-code-button,
   color: var(--error);
 }
 
-.code-runner__figures {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-top: 1px solid var(--border);
-  background: #fff;
-}
-
-.code-runner__figure {
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--radius);
-}
-
 /* Home page layout: main column + sidebar (tag cloud, calendar, music) */
 
 .home-layout {
