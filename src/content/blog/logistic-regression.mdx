@@ -179,7 +179,7 @@ print(f"ROC-AUC Score: {roc_auc_score(y_test, y_pred_proba):.4f}")
 # 5. Visualization: Decision Boundary & ROC Curve (Bokeh, interactive)
 # ==============================================================================
 
-# Decision Boundary Mesh — coarser than a typical matplotlib contourf grid
+# Decision Boundary Mesh — coarse, since every cell is its own glyph here
 # (0.08 instead of 0.02) since every cell becomes its own rendered glyph.
 x_min, x_max = X_train_scaled[:, 0].min() - 1, X_train_scaled[:, 0].max() + 1
 y_min, y_max = X_train_scaled[:, 1].min() - 1, X_train_scaled[:, 1].max() + 1

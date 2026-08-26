@@ -1,8 +1,8 @@
 import type { LanguageRuntime, RunResult, BokehPayload } from "./types";
 
 // Unlike PythonRuntime (bare stdlib, fully self-hosted from public/pyodide/),
-// this variant loads NumPy/Pandas/Matplotlib/scikit-learn on demand from
-// Pyodide's own CDN. Those packages aren't part of the npm `pyodide`
+// this variant loads NumPy/Pandas/scikit-learn/Matplotlib/Bokeh on demand
+// from Pyodide's own CDN. Those packages aren't part of the npm `pyodide`
 // distribution — only the interpreter core and stdlib are — so self-hosting
 // them means vendoring 100MB+ of wasm wheels into this repo. Loading the
 // interpreter itself from the same CDN (rather than mixing indexURLs, which
@@ -142,7 +142,10 @@ class PythonFullRuntime implements LanguageRuntime {
       await pyodide.loadPackagesFromImports(code, {
         messageCallback: (msg) => (stdout += msg + "\n"),
       });
-      const needsMatplotlib = /\bmatplotlib\b/.test(code);
+      // Matched against actual import statements, not the whole source —
+      // a comment or string merely mentioning "matplotlib"/"bokeh" must
+      // not trigger this (it did, and broke, before this check existed).
+      const needsMatplotlib = /^\s*(?:import|from)\s+matplotlib\b/m.test(code);
       if (needsMatplotlib) {
         await pyodide.runPythonAsync(MATPLOTLIB_SETUP);
       }
@@ -162,7 +165,7 @@ class PythonFullRuntime implements LanguageRuntime {
         }
       }
       let bokeh: BokehPayload | undefined;
-      if (/\bbokeh\b/.test(code)) {
+      if (/^\s*(?:import|from)\s+bokeh\b/m.test(code)) {
         // A plain JSON string round-trips through the FFI boundary as a
         // regular JS string with no PyProxy involved, unlike a Python
         // list/dict return value — simplest thing that works here.
