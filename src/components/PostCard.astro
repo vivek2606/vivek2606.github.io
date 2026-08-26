@@ -8,7 +8,14 @@ interface Props {
 }
 const { post } = Astro.props;
 const readingTime = estimateReadingTime(post.body);
-const searchIndex = [post.data.title, post.data.description, ...post.data.tags]
+// A few date formats so typing "2026", "august", "aug 20", or the ISO
+// form all match — same free-text search box, no separate date picker.
+const dateStrings = [
+  post.data.date.toISOString().slice(0, 10),
+  post.data.date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+  post.data.date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+];
+const searchIndex = [post.data.title, post.data.description, ...post.data.tags, ...dateStrings]
   .join(" ")
   .toLowerCase();
 ---
