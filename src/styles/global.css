@@ -451,11 +451,23 @@ a.tag-pill:hover {
   font-size: 0.72rem;
 }
 
+.post-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.75rem 0 1.5rem;
+}
+
+.post-toolbar .tag-pills {
+  margin: 0;
+}
+
 .share-link {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin: 0.5rem 0 1.5rem;
+  flex-shrink: 0;
   padding: 0.35rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: 999px;
