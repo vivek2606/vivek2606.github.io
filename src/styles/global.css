@@ -1,5 +1,6 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/dancing-script";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 
@@ -21,6 +22,7 @@
   --shadow-md: 0 8px 24px rgba(20, 20, 40, 0.08), 0 2px 6px rgba(20, 20, 40, 0.04);
   --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-display: "Space Grotesk Variable", var(--font-sans);
+  --font-cursive: "Dancing Script Variable", cursive;
   --mono-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-family: var(--font-sans);
 }
@@ -218,18 +220,21 @@ button {
   margin: 0 0 1rem;
 }
 
-.hero__title--masthead {
-  font-size: 3.5rem;
+.hero__masthead {
+  font-family: var(--font-cursive);
   font-weight: 700;
-  background: linear-gradient(135deg, var(--fg), var(--accent) 140%);
+  font-size: 4rem;
+  line-height: 1;
+  margin: 0 0 0.5rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 @media (max-width: 640px) {
-  .hero__title--masthead {
-    font-size: 2.5rem;
+  .hero__masthead {
+    font-size: 3rem;
   }
 }
 
@@ -676,19 +681,27 @@ pre code {
   color: var(--error);
 }
 
-/* Home page widgets: tag cloud, archive calendar, music player */
+/* Home page layout: main column + sidebar (tag cloud, calendar, music) */
 
-.widget-row {
+.home-layout {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.25rem;
-  margin-bottom: 3rem;
+  grid-template-columns: 1fr 260px;
+  gap: 3rem;
+  align-items: start;
 }
 
 @media (max-width: 860px) {
-  .widget-row {
+  .home-layout {
     grid-template-columns: 1fr;
   }
+}
+
+.home-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  top: 5.5rem;
 }
 
 .widget {

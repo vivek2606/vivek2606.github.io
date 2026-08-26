@@ -12,40 +12,38 @@ const posts = (await getCollection("blog")).sort(
 const latestPosts = posts.slice(0, 3);
 ---
 
-<Base
-  title="Vivek's Weblog"
-  description="Vivek Raj — Data Science & Deep Learning enthusiast. R, Python, Haskell, and Julia code examples that run inline in the browser."
-  wide
->
-  <section class="hero">
-    <div class="hero__glow" aria-hidden="true"></div>
-    <h1 class="hero__title hero__title--masthead">Vivek's Weblog</h1>
-    <p class="hero__tagline">
-      Hi, I'm <strong>Vivek Raj</strong> — a Data Science &amp; Deep Learning enthusiast based in
-      India. This is where I write up code examples and short explorations in R, Python, Haskell,
-      and Julia. Every runnable snippet here executes live in your browser via WebAssembly (Pyodide
-      for Python, webR for R) — nothing is sent to a server, and there's no setup required to try
-      it yourself.
-    </p>
-    <div class="hero__cta">
-      <a href="/blog/" class="button button--primary">Read the blog</a>
-      <a href="/about/" class="button button--secondary">More about me</a>
-    </div>
-  </section>
+<Base title="Vivek's Weblog" description="Personal blog: R, Python, Haskell, and Julia code examples that run inline in the browser." wide>
+  <div class="home-layout">
+    <div>
+      <section class="hero">
+        <div class="hero__glow" aria-hidden="true"></div>
+        <p class="hero__masthead">Vivek's Weblog</p>
+        <h1 class="hero__title">Hi, I'm Vivek Raj 👋</h1>
+        <p class="hero__tagline">
+          Data Science &amp; Deep Learning enthusiast. I write about R, Python, Haskell, and Julia —
+          with code examples you can run right here in the browser, no setup required.
+        </p>
+        <div class="hero__cta">
+          <a href="/blog/" class="button button--primary">Read the blog</a>
+          <a href="/about/" class="button button--secondary">About me</a>
+        </div>
+      </section>
 
-  <section class="widget-row">
-    <TagCloud />
-    <ArchiveCalendar />
-    <MusicPlayer />
-  </section>
+      <section>
+        <div class="section-heading">
+          <h2>Latest posts</h2>
+          <a href="/blog/">View all →</a>
+        </div>
+        <div class="post-list">
+          {latestPosts.map((post) => <PostCard post={post} />)}
+        </div>
+      </section>
+    </div>
 
-  <section>
-    <div class="section-heading">
-      <h2>Latest posts</h2>
-      <a href="/blog/">View all →</a>
-    </div>
-    <div class="post-list">
-      {latestPosts.map((post) => <PostCard post={post} />)}
-    </div>
-  </section>
+    <aside class="home-sidebar">
+      <TagCloud />
+      <ArchiveCalendar />
+      <MusicPlayer />
+    </aside>
+  </div>
 </Base>
