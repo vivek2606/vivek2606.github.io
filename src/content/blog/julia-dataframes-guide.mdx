@@ -111,6 +111,26 @@ df <- data.frame(
 )
 ```
 
+**Output (Python):**
+
+```text
+    name  age   salary   dept
+0  Alice   25  72000.0    Eng
+1    Bob   32  65500.0  Sales
+2  Carol   29  91200.0    Eng
+3   Dave   41  88750.0    Ops
+```
+
+**Output (R):**
+
+```text
+   name age salary  dept
+1 Alice  25  72000   Eng
+2   Bob  32  65500 Sales
+3 Carol  29  91200   Eng
+4  Dave  41  88750   Ops
+```
+
 The keyword-argument constructor is the idiomatic way to build a Julia `DataFrame`, but there are others:
 
 ```julia
@@ -181,6 +201,35 @@ str(df)      # structure + types
 head(df, 2)
 tail(df, 2)
 summary(df)
+```
+
+**Output (Python, `df.describe(include="all")`):**
+
+```text
+         name        age       salary dept
+count       4   4.000000      4.00000    4
+unique      4        NaN          NaN    3
+top     Alice        NaN          NaN  Eng
+freq        1        NaN          NaN    2
+mean      NaN  31.750000  79362.50000  NaN
+std       NaN   6.800735  12578.11426  NaN
+min       NaN  25.000000  65500.00000  NaN
+25%       NaN  28.000000  70375.00000  NaN
+50%       NaN  30.500000  80375.00000  NaN
+75%       NaN  34.250000  89362.50000  NaN
+max       NaN  41.000000  91200.00000  NaN
+```
+
+**Output (R, `summary(df)`):**
+
+```text
+     name                age            salary          dept
+ Length:4           Min.   :25.00   Min.   :65500   Length:4
+ Class :character   1st Qu.:28.00   1st Qu.:70375   Class :character
+ Mode  :character   Median :30.50   Median :80375   Mode  :character
+                     Mean   :31.75   Mean   :79362
+                     3rd Qu.:34.25   3rd Qu.:89362
+                     Max.   :41.00   Max.   :91200
 ```
 
 One nice detail: `describe(df)` in DataFrames.jl reports `nmissing` per column by default, so you get a missing-data audit for free — in pandas you typically chain `.isna().sum()` alongside `.describe()` to get the same picture.
@@ -275,6 +324,24 @@ df[df.apply(lambda row: row.age > 28 and row.dept == "Eng", axis=1)]
 # dplyr
 df %>% filter(age > 28)
 df %>% filter(age > 28, dept == "Eng")
+```
+
+**Output (Python, `df[df["age"] > 28]`):**
+
+```text
+    name  age   salary   dept
+1    Bob   32  65500.0  Sales
+2  Carol   29  91200.0    Eng
+3   Dave   41  88750.0    Ops
+```
+
+**Output (R, `df %>% filter(age > 28)`):**
+
+```text
+   name age salary  dept
+2   Bob  32  65500 Sales
+3 Carol  29  91200   Eng
+4  Dave  41  88750   Ops
 ```
 
 The `.` in `df.age .> 28` is Julia's **broadcasting operator** — it's not decorative. `>` alone compares two scalars; `.>` explicitly asks Julia to apply `>` element-wise across the vector, and the compiler *fuses* every chained broadcast (`.&`, `.>`, `.==`, …) into a single loop with no intermediate array allocations. This is conceptually similar to how NumPy vectorizes `arr > 28`, except NumPy's vectorization is a hard-coded C kernel per operation, while Julia's broadcasting is a general mechanism that works identically whether you're calling a builtin comparison or a function you wrote five minutes ago.
@@ -398,6 +465,52 @@ tidyr::replace_na(df5$x, 0)
 na.omit(df5)
 ```
 
+**Output (Python):**
+
+```text
+df5:
+     x    y
+0  1.0  NaN
+1  2.0  2.0
+2  NaN  3.0
+3  4.0  4.0
+
+df5["x"].isna():
+0    False
+1    False
+2     True
+3    False
+Name: x, dtype: bool
+
+df5["y"].mean(skipna=True): 3.0
+
+df5.dropna():
+     x    y
+1  2.0  2.0
+3  4.0  4.0
+```
+
+**Output (R):**
+
+```text
+df5:
+   x  y
+1  1 NA
+2  2  2
+3 NA  3
+4  4  4
+
+is.na(df5$x):
+[1] FALSE FALSE  TRUE FALSE
+
+mean(df5$y, na.rm = TRUE): 3
+
+na.omit(df5):
+  x y
+2 2 2
+4 4 4
+```
+
 R's `NA` is actually the closest conceptual sibling to Julia's `missing` — both are genuine sentinel values distinct from any numeric encoding, and both propagate through arithmetic by default (`NA + 1` is `NA`; `missing + 1` is `missing`). NumPy's classic `np.nan`, by contrast, is just a special IEEE-754 float, which is why it can't represent "missing integer" without silently upcasting the whole column to `float64` — a well-known pandas gotcha that Julia's `Union{Int64, Missing}` sidesteps entirely by keeping the column's true integer values as `Int64` and only paying a small tag-check cost for the union.
 
 ## 10. Group-by and aggregation (split-apply-combine)
@@ -437,6 +550,24 @@ gdf %>% summarise(n = n())
 gdf %>% summarise(avg_salary = mean(salary))
 gdf %>% summarise(avg_salary = mean(salary), max_age = max(age))
 df <- df %>% group_by(dept) %>% mutate(dept_avg_salary = mean(salary))
+```
+
+**Output (Python, `gdf.agg(avg_salary=("salary", "mean"), max_age=("age", "max"))`):**
+
+```text
+    dept  avg_salary  max_age
+0    Eng     81600.0       29
+1    Ops     88750.0       41
+2  Sales     65500.0       32
+```
+
+**Output (R, `gdf %>% summarise(avg_salary = mean(salary), max_age = max(age))`):**
+
+```text
+   dept avg_salary max_age
+1   Eng      81600      29
+2   Ops      88750      41
+3 Sales      65500      32
 ```
 
 Both DataFrames.jl and pandas split the work into the same three logical phases — split, apply, combine — but the ergonomics differ in a telling way: DataFrames.jl's `combine` accepts the same `col => fn => name` mini-language you already learned for `select`/`transform` in Section 7, so there's exactly one syntax to internalize for "apply a function to columns and name the result," whether or not grouping is involved. pandas has a comparatively larger surface area here — `.agg()`, named aggregation tuples, `.apply()`, and `.transform()` each behave subtly differently around output shape and index alignment, which is a recurring source of "why did this return a Series instead of a DataFrame" confusion for intermediate pandas users.
@@ -480,6 +611,26 @@ semi_join(df, depts, by = "dept")
 anti_join(df, depts, by = "dept")
 ```
 
+**Output (Python, `pd.merge(df, depts, on="dept", how="inner")`):**
+
+```text
+    name  age   salary   dept  budget
+0  Alice   25  72000.0    Eng  500000
+1    Bob   32  65500.0  Sales  200000
+2  Carol   29  91200.0    Eng  500000
+3   Dave   41  88750.0    Ops  150000
+```
+
+**Output (R, `inner_join(df, depts, by = "dept")`):**
+
+```text
+   dept  name age salary budget
+1   Eng Alice  25  72000 500000
+2   Eng Carol  29  91200 500000
+3   Ops  Dave  41  88750 150000
+4 Sales   Bob  32  65500 200000
+```
+
 DataFrames.jl having first-class `semijoin`/`antijoin` functions is a nice ergonomic win over pandas, which requires the `isin` workaround shown above — this is one of a handful of places where DataFrames.jl's API was deliberately designed with `dplyr`'s vocabulary in mind, and it shows.
 
 ## 12. Reshaping: wide ↔ long
@@ -506,6 +657,38 @@ back_to_wide = long.pivot(index="id", columns="subject", values="score").reset_i
 ```r
 long <- wide %>% pivot_longer(cols = c(math, science), names_to = "subject", values_to = "score")
 back_to_wide <- long %>% pivot_wider(names_from = subject, values_from = score)
+```
+
+**Output (Python):**
+
+```text
+long:
+   id  subject  score
+0   1     math     90
+1   2     math     85
+2   1  science     88
+3   2  science     92
+
+back_to_wide:
+subject  id  math  science
+0         1    90       88
+1         2    85       92
+```
+
+**Output (R):**
+
+```text
+long:
+  id subject score
+1  1    math    90
+2  1 science    88
+3  2    math    85
+4  2 science    92
+
+back_to_wide:
+  id math science
+1  1   90      88
+3  2   85      92
 ```
 
 The naming is a nice illustration of the ecosystem's history: `stack`/`unstack` are DataFrames.jl's original terms (shared with pandas' own lower-level `.stack()`/`.unstack()` methods, which operate on MultiIndex levels rather than columns); `melt`/`pivot` are pandas' higher-level, more commonly-used equivalents; and `pivot_longer`/`pivot_wider` are the modern `tidyr` (R) names that superseded the older `gather`/`spread`. All three ecosystems converged on the same two operations because the wide/long duality is fundamental to tabular data, not a design choice any one of them invented.
