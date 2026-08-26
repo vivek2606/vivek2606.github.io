@@ -44,10 +44,19 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
       // Runs before paint to avoid a flash of the wrong theme. Explicit
       // choice (localStorage) wins; otherwise no data-theme is set at all,
       // so the CSS media-query default (prefers-color-scheme) applies.
-      const storedTheme = localStorage.getItem("theme");
-      if (storedTheme === "light" || storedTheme === "dark") {
-        document.documentElement.setAttribute("data-theme", storedTheme);
+      function applyStoredTheme(root) {
+        const storedTheme = localStorage.getItem("theme");
+        if (storedTheme === "light" || storedTheme === "dark") {
+          root.setAttribute("data-theme", storedTheme);
+        }
       }
+      applyStoredTheme(document.documentElement);
+      // ClientRouter swaps in a fresh document on client-side navigation,
+      // which has no data-theme attribute — without this it would revert
+      // to the system default until the next full page reload.
+      document.addEventListener("astro:before-swap", (event) => {
+        applyStoredTheme(event.newDocument.documentElement);
+      });
     </script>
   </head>
   <body>
