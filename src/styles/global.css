@@ -286,6 +286,7 @@ button {
 .hero {
   position: relative;
   isolation: isolate;
+  overflow: hidden;
   padding: 2rem 0 3rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 2.5rem;
@@ -485,6 +486,17 @@ a.tag-pill:hover {
 }
 
 /* Blog listing layout */
+
+.blog-layout,
+.post-layout,
+.home-layout {
+  /* Grid items default to min-width: auto, so wide unwrapped content
+     (a table, a long code line) forces the track — and the whole page —
+     wider than the viewport instead of scrolling internally. */
+  & > * {
+    min-width: 0;
+  }
+}
 
 .blog-layout {
   display: grid;
@@ -789,6 +801,29 @@ a.tag-pill:hover {
 .not-found__links a:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Prose tables and math (MDX content can be wider than its column) */
+
+.post-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.post-content th,
+.post-content td {
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
 }
 
 /* Prose code blocks (non-runnable fences in MDX) */
