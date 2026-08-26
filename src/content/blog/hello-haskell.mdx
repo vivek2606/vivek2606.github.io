@@ -1,0 +1,32 @@
+---
+title: "Haskell is here — as code, not yet as a runtime"
+description: "Why Haskell code blocks show a \"coming soon\" message instead of running."
+date: 2026-08-26
+tags: ["haskell", "meta"]
+---
+
+import CodeRunner from "../../components/CodeRunner.tsx";
+
+Haskell blocks are syntax-highlighted like every other language on this
+blog, but pressing **Run** won't execute anything yet:
+
+<CodeRunner client:only="react" lang="haskell" code={`fib :: Int -> Int
+fib n = if n <= 1 then n else fib (n - 1) + fib (n - 2)
+
+main :: IO ()
+main = print (fib 10)
+`} />
+
+Same story as [Julia](/blog/hello-julia/): Python runs on
+[Pyodide](https://pyodide.org) and R runs on
+[webR](https://docs.r-wasm.org/webr/latest/), both mature WebAssembly
+builds with a JS API for loading the interpreter and piping code in.
+Compiling Haskell *to* WASM is possible — GHCJS and Asterius both exist —
+but neither gives you a small, fast, interactive build you can load in a
+browser tab and feed arbitrary code to on demand the way Pyodide and webR
+do.
+
+So the block above fails loudly with a clear reason via
+`UnsupportedRuntime`, instead of pretending to run or crashing silently.
+The moment a real in-browser Haskell runtime shows up, wiring it in is one
+new file in `src/runtimes/` and a registry entry, same as R was.
