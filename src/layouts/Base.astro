@@ -2,15 +2,19 @@
 import "../styles/global.css";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
+import CopyCodeButtons from "../components/CopyCodeButtons.astro";
+import { ClientRouter } from "astro:transitions";
 
 interface Props {
   title: string;
   description?: string;
   wide?: boolean;
   maxWidth?: string;
+  type?: "website" | "article";
 }
-const { title, description, wide = false, maxWidth } = Astro.props;
+const { title, description, wide = false, maxWidth, type = "website" } = Astro.props;
 const resolvedMaxWidth = maxWidth ?? (wide ? "1080px" : undefined);
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <!doctype html>
@@ -19,7 +23,31 @@ const resolvedMaxWidth = maxWidth ?? (wide ? "1080px" : undefined);
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate" type="application/rss+xml" title="Vivek's Weblog" href="/rss.xml" />
     <title>{title}</title>
+
+    <meta property="og:type" content={type} />
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:site_name" content="Vivek's Weblog" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    {description && <meta name="twitter:description" content={description} />}
+
+    <ClientRouter />
+
+    <script is:inline>
+      // Runs before paint to avoid a flash of the wrong theme. Explicit
+      // choice (localStorage) wins; otherwise no data-theme is set at all,
+      // so the CSS media-query default (prefers-color-scheme) applies.
+      const storedTheme = localStorage.getItem("theme");
+      if (storedTheme === "light" || storedTheme === "dark") {
+        document.documentElement.setAttribute("data-theme", storedTheme);
+      }
+    </script>
   </head>
   <body>
     <Navbar />
@@ -27,5 +55,6 @@ const resolvedMaxWidth = maxWidth ?? (wide ? "1080px" : undefined);
       <slot />
     </div>
     <Footer />
+    <CopyCodeButtons />
   </body>
 </html>

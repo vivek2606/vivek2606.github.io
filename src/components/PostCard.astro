@@ -15,7 +15,15 @@ const dateStrings = [
   post.data.date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
   post.data.date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
 ];
-const searchIndex = [post.data.title, post.data.description, ...post.data.tags, ...dateStrings]
+// Includes the raw post body too, so search covers the actual content of
+// a post, not just its title/description/tags/date.
+const searchIndex = [
+  post.data.title,
+  post.data.description,
+  ...post.data.tags,
+  ...dateStrings,
+  post.body,
+]
   .join(" ")
   .toLowerCase();
 ---

@@ -25,8 +25,10 @@
   font-family: var(--font-sans);
 }
 
+/* System dark preference — an explicit light choice (data-theme="light")
+   overrides this. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0a0b0f;
     --bg-raised: #15161d;
     --fg: #eceef4;
@@ -38,6 +40,20 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   }
+}
+
+/* Explicit choice via the theme toggle, regardless of system preference. */
+:root[data-theme="dark"] {
+  --bg: #0a0b0f;
+  --bg-raised: #15161d;
+  --fg: #eceef4;
+  --muted: #8d8fa3;
+  --border: #24262f;
+  --accent: #8b7bff;
+  --accent-2: #a78bfa;
+  --accent-fg: #0a0b0f;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -144,7 +160,54 @@ button {
 
 .navbar__links {
   display: flex;
+  align-items: center;
   gap: 1.5rem;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.theme-toggle__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-toggle__icon--moon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:root[data-theme="dark"] .theme-toggle__icon--sun {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle__icon--moon {
+  display: block;
 }
 
 .navbar__link {
@@ -504,6 +567,71 @@ a.tag-pill:hover {
   margin-top: 2rem;
 }
 
+.post-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.post-nav__link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--fg);
+}
+
+.post-nav__link:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: var(--bg-raised);
+}
+
+.post-nav__link--next {
+  grid-column: 2;
+  text-align: right;
+  align-items: flex-end;
+}
+
+.post-nav__label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.post-nav__title {
+  font-weight: 600;
+}
+
+.related-posts {
+  margin-top: 2.5rem;
+}
+
+.related-posts__heading {
+  font-size: 0.9rem;
+}
+
+.related-posts__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.related-posts__list a {
+  text-decoration: none;
+  font-weight: 500;
+}
+
 .author-card {
   position: sticky;
   top: 5.5rem;
@@ -539,6 +667,15 @@ a.tag-pill:hover {
   max-width: 65ch;
 }
 
+.about__avatar {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 1.5rem;
+}
+
 .about__links {
   list-style: none;
   padding: 0;
@@ -557,6 +694,30 @@ pre code {
   overflow-x: auto;
   font-size: 0.9rem;
   font-family: var(--mono-font);
+}
+
+.copy-code-button {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--code-fg);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+pre:hover .copy-code-button,
+.copy-code-button:focus-visible {
+  opacity: 1;
+}
+
+.copy-code-button:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 /* CodeRunner */
@@ -584,6 +745,28 @@ pre code {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+}
+
+.code-runner__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.code-runner__copy {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.code-runner__copy:hover {
+  color: var(--fg);
+  border-color: var(--accent);
 }
 
 .code-runner__run {

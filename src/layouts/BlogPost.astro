@@ -1,4 +1,5 @@
 ---
+import type { CollectionEntry } from "astro:content";
 import Base from "./Base.astro";
 import PostMeta from "../components/PostMeta.astro";
 import TagPills from "../components/TagPills.astro";
@@ -11,11 +12,15 @@ interface Props {
   tags: string[];
   author: string;
   readingTime: number;
+  previousPost?: CollectionEntry<"blog">;
+  nextPost?: CollectionEntry<"blog">;
+  related: CollectionEntry<"blog">[];
 }
-const { title, description, date, tags, author, readingTime } = Astro.props;
+const { title, description, date, tags, author, readingTime, previousPost, nextPost, related } =
+  Astro.props;
 ---
 
-<Base title={`${title} · Vivek Raj`} description={description} wide>
+<Base title={`${title} · Vivek's Weblog`} description={description} wide type="article">
   <div class="post-layout">
     <article class="post">
       <h1>{title}</h1>
@@ -25,6 +30,42 @@ const { title, description, date, tags, author, readingTime } = Astro.props;
       <div class="post-content">
         <slot />
       </div>
+
+      {
+        (previousPost || nextPost) && (
+          <nav class="post-nav" aria-label="Post navigation">
+            {previousPost ? (
+              <a class="post-nav__link post-nav__link--prev" href={`/blog/${previousPost.slug}/`}>
+                <span class="post-nav__label">← Previous</span>
+                <span class="post-nav__title">{previousPost.data.title}</span>
+              </a>
+            ) : (
+              <span />
+            )}
+            {nextPost && (
+              <a class="post-nav__link post-nav__link--next" href={`/blog/${nextPost.slug}/`}>
+                <span class="post-nav__label">Next →</span>
+                <span class="post-nav__title">{nextPost.data.title}</span>
+              </a>
+            )}
+          </nav>
+        )
+      }
+
+      {
+        related.length > 0 && (
+          <section class="related-posts">
+            <h2 class="related-posts__heading">Related posts</h2>
+            <ul class="related-posts__list">
+              {related.map((post) => (
+                <li>
+                  <a href={`/blog/${post.slug}/`}>{post.data.title}</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      }
     </article>
     <AuthorCard />
   </div>

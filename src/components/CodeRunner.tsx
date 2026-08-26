@@ -17,8 +17,20 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
   const [statusMessage, setStatusMessage] = useState("");
   const [output, setOutput] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [copied, setCopied] = useState(false);
   const runtime = useRef(getRuntime(lang)).current;
   const outputId = useId();
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can fail (permissions, insecure context); the
+      // button label just won't flip to "Copied!" — no further handling.
+    }
+  }
 
   async function handleRun() {
     setOutput(null);
@@ -46,16 +58,21 @@ export default function CodeRunner({ lang, code: initialCode }: CodeRunnerProps)
     <div className="code-runner">
       <div className="code-runner__header">
         <span className="code-runner__lang">{runtime.label}</span>
-        <button type="button" onClick={handleRun} disabled={isBusy} className="code-runner__run">
-          {isBusy ? (
-            <span className="code-runner__spinner" aria-hidden="true" />
-          ) : (
-            <svg className="code-runner__play-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4 2.5v11l9-5.5-9-5.5Z" />
-            </svg>
-          )}
-          <span>{status === "loading" ? "Loading…" : status === "running" ? "Running…" : "Run"}</span>
-        </button>
+        <div className="code-runner__actions">
+          <button type="button" onClick={handleCopy} className="code-runner__copy">
+            {copied ? "Copied!" : "Copy"}
+          </button>
+          <button type="button" onClick={handleRun} disabled={isBusy} className="code-runner__run">
+            {isBusy ? (
+              <span className="code-runner__spinner" aria-hidden="true" />
+            ) : (
+              <svg className="code-runner__play-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4 2.5v11l9-5.5-9-5.5Z" />
+              </svg>
+            )}
+            <span>{status === "loading" ? "Loading…" : status === "running" ? "Running…" : "Run"}</span>
+          </button>
+        </div>
       </div>
       <Editor
         value={code}

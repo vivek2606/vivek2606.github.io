@@ -1,17 +1,32 @@
 ---
-import { getCollection } from "astro:content";
+import { getCollection, type CollectionEntry } from "astro:content";
 import BlogPost from "../../layouts/BlogPost.astro";
 import { estimateReadingTime } from "../../lib/reading-time";
 
 export async function getStaticPaths() {
-  const posts = await getCollection("blog");
-  return posts.map((post) => ({
-    params: { slug: post.slug },
-    props: { post },
-  }));
+  const posts = (await getCollection("blog")).sort(
+    (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+  );
+
+  return posts.map((post, index) => {
+    const sharedTagCount = (other: CollectionEntry<"blog">) =>
+      other.data.tags.filter((tag) => post.data.tags.includes(tag)).length;
+
+    const related = posts
+      .filter((other) => other.slug !== post.slug && sharedTagCount(other) > 0)
+      .sort((a, b) => sharedTagCount(b) - sharedTagCount(a) || b.data.date.valueOf() - a.data.date.valueOf())
+      .slice(0, 3);
+
+    return {
+      params: { slug: post.slug },
+      // Posts are sorted newest-first, so the next array index is the
+      // older post ("previous" to read) and the prior index is newer.
+      props: { post, previousPost: posts[index + 1], nextPost: posts[index - 1], related },
+    };
+  });
 }
 
-const { post } = Astro.props;
+const { post, previousPost, nextPost, related } = Astro.props;
 const { Content } = await post.render();
 const readingTime = estimateReadingTime(post.body);
 ---
@@ -23,6 +38,9 @@ const readingTime = estimateReadingTime(post.body);
   tags={post.data.tags}
   author={post.data.author}
   readingTime={readingTime}
+  previousPost={previousPost}
+  nextPost={nextPost}
+  related={related}
 >
   <Content />
 </BlogPost>

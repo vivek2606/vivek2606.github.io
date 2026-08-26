@@ -1,6 +1,7 @@
 import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
+import sitemap from "@astrojs/sitemap";
 
 // vivek2606.github.io is a GitHub Pages *user* site (repo name matches the
 // username), which always serves at the domain root — unlike a project
@@ -8,5 +9,5 @@ import react from "@astrojs/react";
 // `base` config needed here as a result.
 export default defineConfig({
   site: "https://vivek2606.github.io",
-  integrations: [react(), mdx()],
+  integrations: [react(), mdx(), sitemap()],
 });
