@@ -1,6 +1,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/space-grotesk";
-@import "@fontsource-variable/dancing-script";
+@import "@fontsource-variable/playfair-display";
+@import "@fontsource-variable/playfair-display/wght-italic.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 
@@ -22,7 +23,7 @@
   --shadow-md: 0 8px 24px rgba(20, 20, 40, 0.08), 0 2px 6px rgba(20, 20, 40, 0.04);
   --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-display: "Space Grotesk Variable", var(--font-sans);
-  --font-cursive: "Dancing Script Variable", cursive;
+  --font-signature: "Playfair Display Variable", serif;
   --mono-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-family: var(--font-sans);
 }
@@ -215,16 +216,13 @@ button {
   pointer-events: none;
 }
 
-.hero__title {
-  font-size: 2.5rem;
-  margin: 0 0 1rem;
-}
-
 .hero__masthead {
-  font-family: var(--font-cursive);
+  font-family: var(--font-signature);
+  font-style: italic;
   font-weight: 700;
-  font-size: 4rem;
-  line-height: 1;
+  font-size: 3.75rem;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
   margin: 0 0 0.5rem;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   -webkit-background-clip: text;
@@ -234,7 +232,7 @@ button {
 
 @media (max-width: 640px) {
   .hero__masthead {
-    font-size: 3rem;
+    font-size: 2.75rem;
   }
 }
 
