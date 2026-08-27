@@ -396,6 +396,21 @@ button {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
+.post-card__cover-link {
+  display: block;
+  /* Pull the image out to the card's own edges, cancelling .post-card's
+     padding, so it bleeds full-width instead of sitting in a text inset. */
+  margin: -1.5rem -1.5rem 1.1rem;
+}
+
+.post-card__cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
 .post-card__title {
   margin: 0 0 0.35rem;
   font-size: 1.3rem;
@@ -617,6 +632,16 @@ a.tag-pill:hover {
   .post-layout {
     grid-template-columns: 1fr;
   }
+}
+
+.post-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-md);
 }
 
 .post h1 {

@@ -12,21 +12,39 @@ interface Props {
   date: Date;
   tags: string[];
   author: string;
+  cover?: string;
   readingTime: number;
   previousPost?: CollectionEntry<"blog">;
   nextPost?: CollectionEntry<"blog">;
   related: CollectionEntry<"blog">[];
 }
-const { title, description, date, tags, author, readingTime, previousPost, nextPost, related } =
-  Astro.props;
+const {
+  title,
+  description,
+  date,
+  tags,
+  author,
+  cover,
+  readingTime,
+  previousPost,
+  nextPost,
+  related,
+} = Astro.props;
 
 const postUrl = new URL(Astro.url.pathname, Astro.site);
 const tweetHref = `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(postUrl.toString())}`;
 ---
 
-<Base title={`${title} · Vivek's Weblog`} description={description} wide type="article">
+<Base
+  title={`${title} · Vivek's Weblog`}
+  description={description}
+  image={cover}
+  wide
+  type="article"
+>
   <div class="post-layout">
     <article class="post">
+      {cover && <img class="post-cover" src={cover} alt="" />}
       <h1>{title}</h1>
       <PostMeta date={date} author={author} readingTime={readingTime} />
       <p class="post-description">{description}</p>

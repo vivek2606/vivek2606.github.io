@@ -8,6 +8,7 @@ const blog = defineCollection({
     date: z.coerce.date(),
     tags: z.array(z.string()).default([]),
     author: z.string().default("Vivek Raj"),
+    cover: z.string().optional(),
   }),
 });
 

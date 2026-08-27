@@ -28,11 +28,14 @@ const searchIndex = [
   .toLowerCase();
 ---
 
-<article
-  class="post-card"
-  data-search={searchIndex}
-  data-tags={post.data.tags.join(",").toLowerCase()}
->
+<article class="post-card" data-search={searchIndex} data-tags={post.data.tags.join(",").toLowerCase()}>
+  {
+    post.data.cover && (
+      <a href={`/blog/${post.slug}/`} class="post-card__cover-link">
+        <img class="post-card__cover" src={post.data.cover} alt="" loading="lazy" />
+      </a>
+    )
+  }
   <h2 class="post-card__title">
     <a href={`/blog/${post.slug}/`}>{post.data.title}</a>
   </h2>
