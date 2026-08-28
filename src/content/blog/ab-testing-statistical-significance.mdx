@@ -1,0 +1,235 @@
+---
+title: "A/B Testing and Statistical Significance, Explained With a Simulation"
+description: "What a p-value actually means, why 'statistically significant' isn't the same as 'real,' and why peeking at your A/B test results early quietly wrecks your false-positive rate — demonstrated with a runnable Monte Carlo simulation, not just formulas."
+date: "2026-08-28T22:00:00Z"
+tags: ["statistics", "python", "data-science", "a-b-testing", "experimentation"]
+author: "Vivek Raj"
+cover: "/images/covers/ab-testing-statistical-significance.jpg"
+---
+
+import CodeRunner from "../../components/CodeRunner.tsx";
+
+Every "Variant B increased conversions by 12%!" headline you've seen rests on a statistical test, and most of the ways those tests get misused are quiet and easy to miss — nobody's lying, the math just gets applied a little wrong. This post builds the actual test up from its assumptions, then — instead of asking you to trust the formulas — runs thousands of simulated A/B tests where the *true* answer is known in advance, so you can watch the theory's claims actually hold (or fail to) in the numbers.
+
+## 1. The setup
+
+A typical A/B test: visitors are randomly split between a control (A) and a variant (B), and you measure how many in each group convert (buy, sign up, click — whatever the goal is). The question isn't just "which rate is higher" — with any finite sample, B's rate will almost never be *exactly* equal to A's, purely from random noise, even when the underlying, true conversion probability is identical for both. The question is: **is the gap we observed bigger than random noise alone would typically produce?**
+
+That's what a hypothesis test answers. We set up two competing claims:
+
+$$
+H_0: p_A = p_B \qquad \qquad H_a: p_A \ne p_B
+$$
+
+$H_0$ (the **null hypothesis**) says there's no real difference — any gap we see is noise. $H_a$ (the **alternative**) says there's a genuine difference. The test doesn't "prove" either one; it asks how surprising the observed data would be *if the null were true*, and that's the only question a p-value ever answers.
+
+## 2. The two-proportion z-test
+
+For comparing two conversion rates, the standard tool is a **two-proportion z-test**. With $x_A$ conversions out of $n_A$ visitors in the control, and $x_B$ out of $n_B$ in the variant:
+
+$$
+\hat{p}_A = \frac{x_A}{n_A}, \qquad \hat{p}_B = \frac{x_B}{n_B}
+$$
+
+Under $H_0$, both groups share one true rate, so we pool them to get the best estimate of it:
+
+$$
+\hat{p} = \frac{x_A + x_B}{n_A + n_B}
+$$
+
+That pooled rate gives us the standard error — how much random spread to expect in the *difference* between two sample proportions of these sizes, if the null is true:
+
+$$
+SE = \sqrt{\hat{p}(1 - \hat{p}) \left( \frac{1}{n_A} + \frac{1}{n_B} \right)}
+$$
+
+The **z-statistic** is just the observed gap measured in units of that expected noise:
+
+$$
+z = \frac{\hat{p}_B - \hat{p}_A}{SE}
+$$
+
+And the **p-value** is the probability, under $H_0$, of seeing a gap at least this extreme purely by chance:
+
+$$
+p\text{-value} = 2 \left(1 - \Phi(|z|)\right)
+$$
+
+where $\Phi$ is the standard normal CDF. If that probability is small — conventionally, below a threshold $\alpha$ (almost always $0.05$) — the result is called "statistically significant."
+
+## 3. What a p-value does *not* mean
+
+This is the part that gets misquoted constantly, so it's worth being precise before touching any code:
+
+- **A p-value is not the probability the null hypothesis is true.** $p = 0.03$ does not mean "there's a 3% chance there's really no difference." It means: *if* there really were no difference, a gap this large (or larger) would show up about 3% of the time by chance alone.
+- **$p < 0.05$ does not mean the effect is real, or big, or important.** It means the result would be unusual under the null. With a large enough sample, even a trivially small, practically meaningless difference becomes statistically significant.
+- **$p \ge 0.05$ does not mean there's no effect.** It might just mean your sample was too small to detect a real effect that's actually there — which is exactly what the simulation in section 5 will show happening.
+
+## 4. Statistical power and sample size
+
+**Power** is the probability your test correctly detects a real effect, given it exists — formally, $1 - \beta$, where $\beta$ is the probability of a **false negative** (missing a real effect). Power depends on three things pulling against each other: the size of the true effect, the sample size, and your significance threshold $\alpha$. A rough sample-size formula for a two-proportion test, targeting power $1 - \beta$ at significance $\alpha$:
+
+$$
+n \approx \frac{\left(z_{\alpha/2} + z_{\beta}\right)^2 \cdot 2\bar{p}(1 - \bar{p})}{(p_B - p_A)^2}
+$$
+
+The intuition, even without the formula: **smaller effects need more data to detect reliably**, and most underpowered A/B tests fail not because the effect isn't real, but because nobody ran the numbers on how many visitors it would actually take to see it.
+
+## 5. Watching all of this happen, in a simulation
+
+Formulas describing long-run frequencies are easy to state and easy to misjudge intuitively. So instead of taking "a 5% significance threshold gives a 5% false-positive rate" on faith, the simulation below actually runs thousands of A/B tests where the true answer is fixed in advance by the code, and checks whether the test's real-world behavior matches what the theory promises — for the false-positive rate, for statistical power, and for a specific way A/B tests commonly go wrong in practice: **peeking**.
+
+That last one deserves a preview. Checking your test's p-value every day and stopping as soon as it dips below 0.05 feels harmless — you're just "keeping an eye on it." It isn't harmless: each additional look is another chance for random noise to cross the threshold, so the *true* false-positive rate of "check repeatedly, stop at the first significant result" is well above the 5% you think you signed up for. The simulation measures by how much.
+
+<CodeRunner client:only="react" lang="python-full" code={`import numpy as np
+from scipy import stats
+from bokeh.plotting import figure
+
+rng = np.random.default_rng(42)
+
+def two_proportion_z_test(x_a, n_a, x_b, n_b):
+    p_a, p_b = x_a / n_a, x_b / n_b
+    p_pool = (x_a + x_b) / (n_a + n_b)
+    se = np.sqrt(p_pool * (1 - p_pool) * (1 / n_a + 1 / n_b))
+    z = (p_b - p_a) / se
+    p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+    return z, p_value
+
+# ==============================================================================
+# 1. A single A/B test
+# ==============================================================================
+x_a, n_a = 100, 1000
+x_b, n_b = 120, 1000
+z, p_value = two_proportion_z_test(x_a, n_a, x_b, n_b)
+print("--- Single A/B test example ---")
+print(f"Variant A: {x_a}/{n_a} = {x_a/n_a:.1%} conversion")
+print(f"Variant B: {x_b}/{n_b} = {x_b/n_b:.1%} conversion")
+print(f"z = {z:.3f}, p-value = {p_value:.4f}")
+print(f"Significant at alpha=0.05: {p_value < 0.05}")
+print("(B looks 20% better in relative terms -- but hold that thought for section 5.3)")
+
+# ==============================================================================
+# 2. False positives: what happens when there's truly NO difference?
+# ==============================================================================
+n_simulations = 1500
+n_per_variant = 1000
+true_conversion_rate = 0.10
+
+false_positives = 0
+p_values_null = []
+for _ in range(n_simulations):
+    conv_a = rng.binomial(n_per_variant, true_conversion_rate)
+    conv_b = rng.binomial(n_per_variant, true_conversion_rate)   # SAME true rate
+    _, p = two_proportion_z_test(conv_a, n_per_variant, conv_b, n_per_variant)
+    p_values_null.append(p)
+    if p < 0.05:
+        false_positives += 1
+
+print(f"\\n--- {n_simulations} simulated A/B tests, NO real difference between A and B ---")
+print(f"False positive rate at alpha=0.05: {false_positives/n_simulations:.1%}")
+print("(the theory's promise: this should land close to 5.0%)")
+
+# ==============================================================================
+# 3. Statistical power: detecting a REAL effect at different sample sizes
+# ==============================================================================
+true_rate_a = 0.10
+true_rate_b = 0.12   # a real, fixed 2-point lift -- 20% relative improvement
+sample_sizes = [200, 500, 1000, 2000, 5000, 10000, 20000]
+power_by_n = []
+
+for n in sample_sizes:
+    significant = 0
+    for _ in range(200):
+        conv_a = rng.binomial(n, true_rate_a)
+        conv_b = rng.binomial(n, true_rate_b)
+        _, p = two_proportion_z_test(conv_a, n, conv_b, n)
+        if p < 0.05:
+            significant += 1
+    power_by_n.append(significant / 200)
+
+print("\\n--- Statistical power vs. sample size (true effect: 10% -> 12%) ---")
+for n, power in zip(sample_sizes, power_by_n):
+    print(f"n={n:>6} per variant: power = {power:.1%}")
+print("Notice how low power is at n=1000 -- the same sample size as section 5.1's")
+print("single test, which is exactly why that real 2-point lift came back non-significant.")
+
+# ==============================================================================
+# 4. The peeking problem
+# ==============================================================================
+n_simulations_peek = 300
+max_n = 2000
+check_every = 100
+
+peeked_false_positives = 0
+final_only_false_positives = 0
+for _ in range(n_simulations_peek):
+    a_conversions = rng.binomial(1, true_conversion_rate, max_n)
+    b_conversions = rng.binomial(1, true_conversion_rate, max_n)   # no real difference
+    stopped_early = False
+    for n in range(check_every, max_n + 1, check_every):
+        _, p = two_proportion_z_test(a_conversions[:n].sum(), n, b_conversions[:n].sum(), n)
+        if p < 0.05:
+            stopped_early = True
+            break
+    if stopped_early:
+        peeked_false_positives += 1
+    _, p_final = two_proportion_z_test(a_conversions.sum(), max_n, b_conversions.sum(), max_n)
+    if p_final < 0.05:
+        final_only_false_positives += 1
+
+print(f"\\n--- The peeking problem ({n_simulations_peek} simulations, no real difference) ---")
+print(f"Checking every {check_every} visitors, stopping at the first p<0.05: "
+      f"{peeked_false_positives/n_simulations_peek:.1%} false positive rate")
+print(f"Checking only once, at the end:                        "
+      f"{final_only_false_positives/n_simulations_peek:.1%} false positive rate")
+
+# ==============================================================================
+# 5. Visualization (Bokeh, interactive)
+# ==============================================================================
+counts, edges = np.histogram(p_values_null, bins=20, range=(0, 1))
+
+null_hist = figure(
+    title="Distribution of p-values Under the Null (no real difference)",
+    x_axis_label="p-value",
+    y_axis_label="Count",
+    width=460,
+    height=400,
+)
+null_hist.quad(top=counts, bottom=0, left=edges[:-1], right=edges[1:],
+                fill_color='#7c3aed', line_color='white', fill_alpha=0.85)
+null_hist.line([0.05, 0.05], [0, max(counts)], line_dash='dashed', line_width=2,
+                color='#b2182b', legend_label='alpha = 0.05')
+
+power_plot = figure(
+    title="Statistical Power vs. Sample Size (true effect: 10% -> 12%)",
+    x_axis_label="Sample size per variant",
+    y_axis_label="Power (fraction of tests reaching p < 0.05)",
+    width=460,
+    height=400,
+    x_axis_type="log",
+)
+power_plot.line(sample_sizes, power_by_n, line_width=2, color='#4f46e5')
+power_plot.scatter(sample_sizes, power_by_n, size=8, fill_color='#4f46e5', line_color='black')
+power_plot.line([min(sample_sizes), max(sample_sizes)], [0.8, 0.8],
+                 line_dash='dashed', color='#b2182b', legend_label='80% power (common target)')
+power_plot.legend.location = "bottom_right"
+`} />
+
+A few things worth stopping on once you've run it:
+
+**The p-value histogram is (close to) flat.** When the null hypothesis is exactly true, a p-value is, by construction, uniformly distributed between 0 and 1 — every band is equally likely, including the band below 0.05. That's not a coincidence or an approximation; it's the literal definition of what "false positive rate = $\alpha$" means, made visible as a shape instead of a sentence.
+
+**The single test from section 5.1 came back non-significant — but the effect it was testing for was real** (the simulation fixed it at a true 10%-to-12% lift, we just don't normally get to know that in practice). Section 5.3's power curve shows why: at $n=1{,}000$ per variant, power for a 2-point lift on a 10% baseline is low, well under a coin flip's worth of reliability. "Not significant" quietly meant "underpowered," not "no effect" — precisely the misreading section 3 warned about, now with a number attached.
+
+**Peeking roughly quintuples the false-positive rate** in this simulation — checking every 100 visitors and stopping at the first `p < 0.05` finds "significance" far more often than checking once at the end does, on data engineered to have *no real difference at all*. This is exactly why serious experimentation platforms either fix the sample size in advance and don't look until it's reached, or use sequential-testing methods specifically designed to allow early stopping without inflating the false-positive rate (see [Evan Miller's writeup](https://www.evanmiller.org/how-not-to-run-an-ab-test.html) for a good treatment of the fix, not just the problem).
+
+## 6. Practical takeaways
+
+- **Decide your sample size before you start**, from a target effect size and power (section 4's formula, or any online A/B test sample-size calculator), and don't stop early just because the p-value dipped below 0.05 — section 5.4 shows exactly what that costs you.
+- **A non-significant result is not evidence of "no effect."** It's frequently evidence of "not enough data to tell" — check your test's power before concluding a variant made no difference.
+- **Statistical significance and practical significance are different questions.** A large enough sample makes almost any real (even minuscule) difference statistically significant. Whether a 0.1 percentage-point lift is worth shipping is a business question the p-value doesn't answer.
+- **If you must peek, use a method built for it** (sequential testing, always-valid p-values), not repeated ordinary z-tests with an informal "stop when it looks good" rule.
+
+---
+
+*If hypothesis testing from first principles is interesting, I did a similar paired t-test analysis — on Stroop-effect reaction times rather than conversion rates, but the same "is this gap bigger than noise" logic — as a [grad-school project, on the Projects page](/projects/).*
