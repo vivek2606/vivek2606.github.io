@@ -1,0 +1,232 @@
+---
+title: "Demystifying PCA: The Math Behind Dimensionality Reduction, Implemented from Scratch"
+description: "How Principal Component Analysis actually works — covariance matrices, eigenvectors, and explained variance — built from scratch in NumPy, cross-checked against scikit-learn, and visualized with Bokeh."
+date: "2026-08-28T18:00:00Z"
+tags: ["machine-learning", "python", "data-science", "statistics", "dimensionality-reduction"]
+author: "Vivek Raj"
+cover: "/images/covers/pca-dimensionality-reduction.jpg"
+---
+
+import CodeRunner from "../../components/CodeRunner.tsx";
+
+Real datasets rarely come with just two or three features. A customer table might have fifty columns; a genomics dataset might have thousands. **Principal Component Analysis (PCA)** is the classic answer to a question that keeps coming up once dimensionality gets out of hand: *can we compress this down to a handful of numbers per row, while throwing away as little information as possible?*
+
+This post builds PCA up from the math — covariance, eigenvectors, explained variance — then implements it from scratch in NumPy, cross-checks the result against scikit-learn, and visualizes both the projection and the "how many components do I actually need" question.
+
+---
+
+## 1. Why reduce dimensions at all
+
+A few concrete reasons PCA (or something like it) shows up constantly in practice:
+
+- **Visualization.** You can't plot 20 dimensions. You can plot 2, or maybe 3.
+- **Noise and redundancy.** Real features are often correlated with each other (height and shoe size, say). Much of that shared variation is redundant, not new information.
+- **The curse of dimensionality.** Distance-based methods (KNN, clustering) and models with many parameters tend to need exponentially more data as dimensions grow, and start to behave strangely in high dimensions where every point ends up roughly equidistant from every other point.
+- **Speed.** Fewer input dimensions means faster downstream models, sometimes dramatically so.
+
+PCA's specific answer: find the directions in feature space along which the data varies the *most*, and keep only those directions. Geometrically, imagine a cloud of points shaped like a squashed ellipse — PCA finds the ellipse's long axis first, then the next-longest axis perpendicular to it, and so on.
+
+## 2. The math
+
+### Step 1: Center the data
+
+PCA is about directions of variance, so the first step is to remove any offset — subtract each feature's mean, so the data cloud is centered at the origin:
+
+$$
+X_c = X - \bar{X}
+$$
+
+(In practice you'll often also **scale** each feature to unit variance before this — more on why in section 6.)
+
+### Step 2: The covariance matrix
+
+For $p$ features, the $p \times p$ covariance matrix captures how every pair of features varies together:
+
+$$
+\Sigma = \frac{1}{n - 1} X_c^T X_c
+$$
+
+The diagonal entries are each feature's own variance; the off-diagonal entries are covariances between feature pairs. A covariance matrix that's far from diagonal is exactly the kind of redundancy PCA is designed to exploit.
+
+### Step 3: Eigenvectors and eigenvalues
+
+The **principal components** are the eigenvectors of $\Sigma$ — the directions along which the data's spread, measured by $\Sigma$, doesn't rotate, only stretches:
+
+$$
+\Sigma v_i = \lambda_i v_i
+$$
+
+Each eigenvector $v_i$ is a direction in the original feature space; its eigenvalue $\lambda_i$ is the variance of the data *along that direction*. Sorting the eigenvectors by eigenvalue, largest first, gives you PC1 (the direction of maximum variance), PC2 (the next-largest variance direction, constrained to be perpendicular to PC1), and so on.
+
+### Step 4: Project onto the top $k$ components
+
+Stack the top $k$ eigenvectors as columns of a $p \times k$ matrix $W$, then project the centered data onto them:
+
+$$
+Z = X_c W
+$$
+
+$Z$ is your reduced-dimension data — $n$ rows, but now only $k$ columns instead of $p$.
+
+### Step 5: How much information did you keep?
+
+Each eigenvalue's share of the total tells you what fraction of the original variance that component accounts for:
+
+$$
+\text{explained variance ratio}_i = \frac{\lambda_i}{\sum_{j=1}^{p} \lambda_j}
+$$
+
+Summing this ratio across your chosen $k$ components tells you what fraction of the *total* variance you kept — the number you're really trading off against the dimensions you dropped.
+
+## 3. PCA from scratch, cross-checked against scikit-learn
+
+The implementation below does the full recipe above by hand — build the covariance matrix, eigendecompose it, sort, project — on the classic Iris dataset (4 features, 150 flowers, 3 species). It then runs scikit-learn's `PCA` on the same data and checks the two agree, and plots the result with Bokeh: the 2D projection, and a scree plot showing how much variance each component captures.
+
+One subtlety worth calling out in the code: eigenvectors are only unique up to a **sign flip** ($v$ and $-v$ point along the same axis and carry the same variance), so the from-scratch and scikit-learn components are compared by absolute value, not compared directly.
+
+<CodeRunner client:only="react" lang="python-full" code={`import numpy as np
+from sklearn.datasets import load_iris
+from sklearn.decomposition import PCA
+from bokeh.plotting import figure
+
+# ==============================================================================
+# 1. Load the data and center it
+# ==============================================================================
+iris = load_iris()
+X = iris.data                     # 150 x 4: sepal/petal length & width
+y = iris.target                   # species label, 0/1/2
+feature_names = iris.feature_names
+species_names = iris.target_names
+
+X_centered = X - X.mean(axis=0)
+
+print("--- Dataset ---")
+print(f"{X.shape[0]} samples, {X.shape[1]} features: {feature_names}")
+
+# ==============================================================================
+# 2. PCA from scratch: covariance matrix -> eigendecomposition
+# ==============================================================================
+cov_matrix = np.cov(X_centered, rowvar=False)   # 4x4 covariance matrix
+
+# eigh (not eig) because a covariance matrix is always symmetric --
+# it's faster and guarantees real-valued eigenvalues.
+eigenvalues, eigenvectors = np.linalg.eigh(cov_matrix)
+
+# eigh returns ascending order; PCA wants the largest variance first
+order = np.argsort(eigenvalues)[::-1]
+eigenvalues = eigenvalues[order]
+eigenvectors = eigenvectors[:, order]
+
+explained_variance_ratio = eigenvalues / eigenvalues.sum()
+
+print("\\n--- Eigenvalues (variance captured by each component) ---")
+for i, (val, ratio) in enumerate(zip(eigenvalues, explained_variance_ratio)):
+    print(f"PC{i+1}: eigenvalue={val:.4f}  explained_variance_ratio={ratio:.4f}")
+
+# ==============================================================================
+# 3. Project onto the top 2 principal components
+# ==============================================================================
+W = eigenvectors[:, :2]           # 4x2: top two eigenvectors as columns
+Z = X_centered @ W                # 150x2: the projected (reduced) data
+
+print(f"\\nFirst two components explain {explained_variance_ratio[:2].sum():.1%} of total variance")
+
+# ==============================================================================
+# 4. Cross-check against scikit-learn's PCA
+# ==============================================================================
+sk_pca = PCA(n_components=4)
+sk_pca.fit(X)
+
+print("\\n--- scikit-learn's explained_variance_ratio_ (should match ours) ---")
+print(np.round(sk_pca.explained_variance_ratio_, 4))
+print("Matches our from-scratch computation:",
+      np.allclose(sk_pca.explained_variance_ratio_, explained_variance_ratio))
+
+# Eigenvectors are only unique up to a sign flip, so compare magnitudes
+sk_components = sk_pca.components_[:2]
+print("scikit-learn's components match ours (up to sign):",
+      np.allclose(np.abs(sk_components), np.abs(W.T), atol=1e-6))
+
+# ==============================================================================
+# 5. Visualization: 2D projection & scree plot (Bokeh, interactive)
+# ==============================================================================
+colors = ['#4f46e5', '#f4a582', '#2166ac']
+
+projection_plot = figure(
+    title="Iris: 4 Features Projected onto the First 2 Principal Components",
+    x_axis_label=f"PC1 ({explained_variance_ratio[0]:.1%} variance)",
+    y_axis_label=f"PC2 ({explained_variance_ratio[1]:.1%} variance)",
+    width=460,
+    height=400,
+)
+for label, name in enumerate(species_names):
+    mask = y == label
+    projection_plot.scatter(
+        Z[mask, 0], Z[mask, 1],
+        size=8, fill_color=colors[label], line_color='black', line_width=0.5,
+        legend_label=str(name),
+    )
+projection_plot.legend.location = "top_right"
+
+cumulative = np.cumsum(explained_variance_ratio)
+components_x = list(range(1, len(eigenvalues) + 1))
+
+scree_plot = figure(
+    title="Scree Plot: Variance Explained per Component",
+    x_axis_label="Principal Component",
+    y_axis_label="Explained Variance Ratio",
+    width=460,
+    height=400,
+    x_range=(0.5, len(eigenvalues) + 0.5),
+)
+scree_plot.vbar(x=components_x, top=explained_variance_ratio, width=0.5,
+                 fill_color='#7c3aed', legend_label="Per-component")
+scree_plot.line(components_x, cumulative, line_width=2, color='#b2182b',
+                 legend_label="Cumulative")
+scree_plot.scatter(components_x, cumulative, size=6, fill_color='#b2182b')
+scree_plot.legend.location = "center_right"
+`} />
+
+Two things worth noticing in the output. First, the from-scratch eigendecomposition and scikit-learn's PCA agree exactly (up to floating-point precision) — scikit-learn's implementation actually uses SVD rather than eigendecomposition under the hood (see section 6), but the two are mathematically equivalent and land on the same answer. Second, in the scree plot, the first two components already capture the overwhelming majority of the total variance — which is exactly why 2D PCA plots of the Iris dataset are such a common textbook example: you're not losing much by dropping to 2D, and *setosa* separates from the other two species almost perfectly along PC1 alone.
+
+## 4. Choosing $k$: how many components is "enough"?
+
+There's no universal answer, but three common rules of thumb, all readable straight off a scree plot like the one above:
+
+- **Variance threshold.** Keep enough components to explain some target fraction of variance — 90% and 95% are common defaults.
+- **The elbow.** Plot explained variance per component and look for the point where the curve flattens out — additional components past that point are mostly capturing noise.
+- **Kaiser's rule.** For standardized data, keep only components with eigenvalue $> 1$ — i.e., components that individually explain more variance than a single original (standardized) feature would.
+
+None of these are rigorous in a statistical-testing sense; they're heuristics, and in practice the right answer often depends on what you're using the reduced data *for* (a quick 2D visualization has very different requirements than feature engineering for a production model).
+
+## 5. The SVD connection
+
+The eigendecomposition approach above is the clearest way to *derive* PCA, but it's rarely how production libraries actually compute it. scikit-learn (and most serious implementations) instead take the **Singular Value Decomposition** of the centered data matrix directly:
+
+$$
+X_c = U S V^T
+$$
+
+It turns out $V$'s columns are exactly the same principal component directions as before, and the relationship between the singular values $s_i$ and the eigenvalues from section 2 is:
+
+$$
+\lambda_i = \frac{s_i^2}{n - 1}
+$$
+
+Why bother with SVD instead of forming the covariance matrix explicitly? Numerical stability, mainly — computing $X_c^T X_c$ squares the data's condition number, which can amplify floating-point error for ill-conditioned data, whereas SVD operates on $X_c$ directly. For a small, well-behaved dataset like Iris the difference is invisible; for real-world data with highly correlated or poorly-scaled features, it can matter.
+
+## 6. When PCA helps, and when it doesn't
+
+**PCA assumes linearity.** It only finds *linear* combinations of features that maximize variance. If the real structure in your data is curved or looped (think concentric circles, or a Swiss-roll shape), PCA's straight-line projections won't find it — you'd want a non-linear technique like t-SNE or UMAP instead, which optimize for preserving local neighborhood structure rather than global variance.
+
+**Scale your features first.** PCA maximizes variance, and variance is scale-dependent — a feature measured in millimeters will dominate one measured in kilometers purely because of its units, not because it's actually more informative. Standardizing every feature to zero mean and unit variance before computing the covariance matrix is standard practice for exactly this reason (this post skipped it since all four Iris measurements already share the same unit — centimeters).
+
+**Interpretability takes a hit.** Each principal component is a *linear combination* of every original feature, with weights (the eigenvector entries, sometimes called "loadings") that are rarely as intuitive as the original columns. "Component 1, driven mostly by petal length and petal width" is a real thing you can say by inspecting the loadings, but it's a step removed from just reading off a raw feature.
+
+**Maximum variance isn't always what matters.** PCA is unsupervised — it has no idea what you're ultimately trying to predict, and optimizes purely for variance. It's entirely possible for the direction that best separates your actual classes to be a *low*-variance direction that PCA discards. When the downstream task is supervised, methods that use the label — like Linear Discriminant Analysis — are worth considering instead.
+
+None of this makes PCA less useful — it's a genuinely good default for exploratory visualization, decorrelating features, and cutting dimensionality before a distance-sensitive downstream method. It just isn't a universal hammer, and it's worth knowing which nail it's actually for.
+
+---
+
+*If clustering is what brought you to dimensionality reduction in the first place, I used this exact PCA-then-cluster pipeline (country-level socio-economic data, reduced with PCA, then segmented with K-Means and hierarchical clustering) in a [grad-school project — see it on the Projects page](/projects/).*
