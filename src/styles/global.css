@@ -145,6 +145,23 @@ button {
   }
 }
 
+/* Below ~480px, "Vivek's Weblog" + Home/Blog/Projects/About + the theme
+   toggle no longer fit on one line — drop the wordmark and keep just the
+   logo mark linking home, same trade every mobile site nav makes. */
+@media (max-width: 480px) {
+  .navbar__brand-text {
+    display: none;
+  }
+
+  .navbar__links {
+    gap: 0.65rem;
+  }
+
+  .navbar__link {
+    font-size: 0.78rem;
+  }
+}
+
 .navbar__mark {
   display: inline-flex;
   align-items: center;
@@ -155,6 +172,12 @@ button {
   height: 46px;
   width: auto;
   display: block;
+}
+
+@media (max-width: 480px) {
+  .navbar__logo {
+    height: 32px;
+  }
 }
 
 .navbar__logo--dark {
@@ -760,6 +783,67 @@ a.tag-pill:hover {
   gap: 0.4rem;
   font-size: 0.875rem;
   margin: 0;
+}
+
+/* Projects page */
+
+.projects {
+  max-width: 72ch;
+}
+
+.projects__intro {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 2rem;
+}
+
+.project-card {
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.project-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.project-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.project-card__title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.project-card__note {
+  color: var(--muted);
+  margin: 0.75rem 0 1rem;
+}
+
+.project-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.project-card__link:hover {
+  text-decoration: underline;
 }
 
 /* About page */

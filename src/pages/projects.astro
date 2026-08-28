@@ -1,0 +1,122 @@
+---
+import Base from "../layouts/Base.astro";
+
+const REPO_URL = "https://github.com/vivek2606/datascience-project";
+
+interface Project {
+  title: string;
+  category: string;
+  folder: string;
+  note: string;
+}
+
+// Case-study projects from a Data Science program, originally submitted as
+// Jupyter notebooks / R Markdown / PDF write-ups. Notes below are summarized
+// from each notebook's own markdown cells and printed results, not
+// re-derived — a couple of folders in the source repo (an ungraded
+// scratch-work set, and an R EDA project that was never actually filled in
+// past the template) are left out since there's nothing substantive to summarize.
+const projects: Project[] = [
+  {
+    title: "Advanced Regression: House Price Prediction",
+    category: "Regression",
+    folder: "Advance Regression",
+    note: "Ridge and Lasso regression to predict house prices for a company buying undervalued homes in Australia, on a 1,460-row / 81-feature dataset. Lasso at the optimal alpha (0.0001) was chosen as the final model — it zeroed out most coefficients, cutting the effective feature count to 154 while matching Ridge's train/test R², giving a simpler and more generalizable model plus a ranked list of the variables that actually drive price.",
+  },
+  {
+    title: "Clustering & PCA: Country Aid Segmentation",
+    category: "Clustering",
+    folder: "Clustering _ PCA Assignment",
+    note: "PCA followed by K-Means and hierarchical clustering on socio-economic and health indicators for 167 countries, to group nations by overall development for an NGO deciding where aid money matters most. K=2 gave the best silhouette score (0.50), but a finer split was used for the final segmentation so the low-development cluster wasn't so broad it stopped being actionable.",
+  },
+  {
+    title: "EDA: Loan Applicant Risk",
+    category: "EDA",
+    folder: "EDA Case Study",
+    note: "Exploratory analysis of a lending company's applicant data (307,511 rows, 122 columns) to understand which applicant attributes correlate with payment difficulty. Most of the work is data cleaning — dropping columns over 50% missing, deciding what can and can't be safely imputed for categorical vs. numeric fields — before getting to the actual default-risk patterns.",
+  },
+  {
+    title: "GDP Analysis: Growth vs. Education Drop-off",
+    category: "EDA",
+    folder: "GDP Analysis Assignment",
+    note: "Analysis of Indian state-wise GDP growth data, merged with education drop-out statistics to test whether states with lower per-capita GDP see more students drop off before finishing school. The data confirmed it — per-capita GDP is inversely correlated with Primary and (most strongly) Upper Primary drop-out rates, tying low education completion to states' share of GDP from manufacturing and services versus agriculture.",
+  },
+  {
+    title: "Lead Scoring for an EdTech Company",
+    category: "Classification",
+    folder: "Leads Scoring Group Assignment",
+    note: "Logistic regression to score ~9,000 inbound leads by conversion likelihood for an online course provider (X Education), so sales can focus on the leads actually worth calling. The final model reached about 92% train accuracy and 90.7% test accuracy at the chosen probability cutoff, with sensitivity/specificity tradeoffs plotted across cutoffs to pick the one matching the business's target conversion rate.",
+  },
+  {
+    title: "Car Price Prediction",
+    category: "Regression",
+    folder: "Linear Regression Assignment",
+    note: "Multiple linear regression to help a US car manufacturer understand what drives price in the Chinese market, distilled down from the full feature set to a 6-variable final model (via RFE and manual VIF/p-value pruning). That model holds up well out of sample — R² of about 89.6% on train and 89.9% on test, adjusted R² around 89.1%.",
+  },
+  {
+    title: "Telecom Churn: High-Value Customers",
+    category: "Classification",
+    folder: "Telecom Churn Group Case Study",
+    note: "Predicting churn among a telecom's high-value customers, comparing logistic regression (with SMOTE for class imbalance) against a grid-search-tuned random forest. Logistic + SMOTE gave the best balanced result (~82% test accuracy, ~0.84 AUC) and stayed the primary model since it directly surfaces which features matter — the random forest edged out on raw accuracy (~94%) but only caught 46% of actual churners, a worse trade for a business that wants to act on the prediction. Roaming usage, total minutes of usage, ARPU, and max recharge amount were the strongest churn signals.",
+  },
+  {
+    title: "Telecom Churn Rate: Logistic Regression",
+    category: "Classification",
+    folder: "telecom churn rate - multiple logistic regression",
+    note: "A separate, individual pass at telecom churn prediction using multiple logistic regression, with feature selection via RFE and multicollinearity checked through VIF. After tuning the classification cutoff against the sensitivity/specificity tradeoff, the final model landed at about 77% test accuracy.",
+  },
+  {
+    title: "The Stroop Effect",
+    category: "Statistics",
+    folder: "P1 - Stroop Effect",
+    note: "A classic inferential-statistics project: a paired one-tailed t-test on reaction times from the Stroop task (naming ink colors when the word and color conflict). Mean reaction time was 14.05s for congruent words vs. 22.02s for incongruent ones — a large, statistically significant slowdown, confirming the interference effect the task is named for.",
+  },
+  {
+    title: "Investigating the Titanic Dataset",
+    category: "EDA",
+    folder: "P2-EDA of Titanic Dataset",
+    note: "Exploratory analysis of the Kaggle Titanic passenger dataset to find what predicted survival. Class, sex, and port of embarkation stood out as real factors — being female and in 1st class gave the best odds, a male in 3rd class the worst — while age alone wasn't a strong predictor, and having family aboard was linked to modestly better survival odds.",
+  },
+];
+---
+
+<Base
+  title="Projects · Vivek's Weblog"
+  description="Data Science & Deep Learning projects from Vivek Raj's graduate coursework — regression, classification, clustering, and EDA case studies, with code on GitHub."
+>
+  <section class="projects">
+    <h1>Projects</h1>
+    <p class="projects__intro">
+      Case studies and assignments from my Data Science graduate program — regression, classification,
+      clustering, and exploratory analysis, each with its own notebook and write-up. Code, data, and full
+      notebooks for all of them live in one repo:
+      {" "}
+      <a href={REPO_URL} target="_blank" rel="noopener noreferrer">{REPO_URL.replace("https://", "")}</a>.
+    </p>
+
+    <div class="project-list">
+      {
+        projects.map((project) => (
+          <article class="project-card">
+            <div class="project-card__header">
+              <h2 class="project-card__title">{project.title}</h2>
+              <span class="tag-pill">{project.category}</span>
+            </div>
+            <p class="project-card__note">{project.note}</p>
+            <a
+              class="project-card__link"
+              href={`${REPO_URL}/tree/main/${encodeURIComponent(project.folder)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on GitHub
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </a>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+</Base>

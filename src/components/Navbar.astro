@@ -9,6 +9,7 @@ function isActive(href: string): boolean {
 const links = [
   { href: "/", label: "Home" },
   { href: "/blog/", label: "Blog" },
+  { href: "/projects/", label: "Projects" },
   { href: "/about/", label: "About" },
 ];
 ---
@@ -20,7 +21,7 @@ const links = [
         <img class="navbar__logo navbar__logo--light" src="/images/logo-light.png" alt="" />
         <img class="navbar__logo navbar__logo--dark" src="/images/logo-dark.png" alt="" />
       </span>
-      Vivek's Weblog
+      <span class="navbar__brand-text">Vivek's Weblog</span>
     </a>
     <nav class="navbar__links" aria-label="Main navigation">
       {
