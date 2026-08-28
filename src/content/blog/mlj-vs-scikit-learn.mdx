@@ -1,0 +1,622 @@
+---
+title: "MLJ.jl vs Scikit-Learn: A Deep Dive Into Julia's Machine Learning Toolbox"
+description: "A comprehensive guide to MLJ.jl — Julia's unified machine learning framework — with worked examples, a feature-by-feature comparison against scikit-learn, and an honest look at where each one wins."
+date: "2026-08-28"
+tags: ["julia", "mlj", "machine-learning", "scikit-learn", "data-science"]
+author: "Vivek"
+cover: "/images/covers/mlj-vs-scikit-learn.jpg"
+---
+
+If you've spent any time doing machine learning in Python, scikit-learn is probably wired into your muscle memory: `fit`, `predict`, `Pipeline`, `GridSearchCV`. It's the reference implementation of what a clean ML API looks like, and an entire generation of tools — including this post's other subject — have been designed either to imitate it or to deliberately improve on it.
+
+**MLJ.jl** is Julia's answer to scikit-learn. It's not a port and it's not a clone — it's a from-scratch redesign of the "unified ML interface" idea, built by the [Alan Turing Institute](https://www.turing.ac.uk/) and maintained under the [JuliaAI](https://github.com/JuliaAI) organization, that fixes several architectural decisions in scikit-learn the MLJ team considered limiting: rigid linear pipelines, hyperparameters buried behind `__` string-splitting, predictions that collapse probability distributions into bare arrays, and composition that only really works if your workflow is a straight line from raw data to a single estimator.
+
+This post is a full tour of MLJ.jl: its core concepts, its major features with runnable examples, a side-by-side comparison with scikit-learn on the same task, and — just as importantly — an honest account of where MLJ.jl is genuinely better, and where scikit-learn still wins by a mile.
+
+## Table of contents
+
+1. [What MLJ.jl actually is](#what-mljjl-actually-is)
+2. [Installation and a first model](#installation-and-a-first-model)
+3. [Core concept: scientific types](#core-concept-scientific-types)
+4. [Core concept: the model registry](#core-concept-the-model-registry)
+5. [Core concept: machines](#core-concept-machines)
+6. [Pipelines](#pipelines)
+7. [Learning networks: composition beyond pipelines](#learning-networks-composition-beyond-pipelines)
+8. [Hyperparameter tuning](#hyperparameter-tuning)
+9. [Resampling and evaluation](#resampling-and-evaluation)
+10. [Ensembling and stacking](#ensembling-and-stacking)
+11. [Iterative models and early stopping](#iterative-models-and-early-stopping)
+12. [Probabilistic predictions](#probabilistic-predictions)
+13. [Deep learning via MLJFlux](#deep-learning-via-mljflux)
+14. [Persistence and parallelism](#persistence-and-parallelism)
+15. [Side-by-side: the same workflow in both](#side-by-side-the-same-workflow-in-both)
+16. [Feature comparison table](#feature-comparison-table)
+17. [Where MLJ.jl is genuinely superior](#where-mljjl-is-genuinely-superior)
+18. [Where MLJ.jl falls short](#where-mljjl-falls-short)
+19. [So which should you use?](#so-which-should-you-use)
+
+## What MLJ.jl actually is
+
+MLJ describes itself as a toolbox providing "a common interface and meta-algorithms for selecting, tuning, evaluating, composing and comparing" a very large number of machine learning models written in Julia and other languages. As of writing it fronts well over 200 models, but — and this is important to understand up front — MLJ itself implements almost none of them. It's an *interface layer*. The actual algorithms live in separate packages (`DecisionTree.jl`, `XGBoost.jl`, `LIBSVM.jl`, `MLJLinearModels.jl`, `EvoTrees.jl`, `NearestNeighborModels.jl`, and dozens more, plus wrapped R and Python libraries), and MLJ gives them all one consistent API.
+
+That's conceptually similar to what scikit-learn does for `libsvm`, `liblinear`, and its own hand-rolled implementations — except MLJ takes the "many backends, one interface" idea and applies it to the *entire* Julia ML ecosystem rather than keeping it in-house, and it goes further architecturally in three specific ways that show up throughout this post:
+
+- **Models are just hyperparameter containers.** An MLJ model struct (say, `RandomForestClassifier(n_trees=100)`) holds no data and no learned state. Binding it to data happens through a separate object called a *machine*. This separation is what makes MLJ's composition system so much more flexible than scikit-learn's.
+- **Data typing is explicit and enforced via "scientific types."** MLJ doesn't ask "is this a `float64` array or an `object` column" — it asks "is this `Continuous`, `Count`, `Multiclass`, `OrderedFactor`, or `Textual` data," independent of the underlying machine type. This closes off a whole category of silent bugs.
+- **Predictions are first-class probability distributions**, not a second `predict_proba` method bolted on afterward.
+
+We'll unpack all three below.
+
+## Installation and a first model
+
+```julia
+using Pkg
+Pkg.add("MLJ")
+```
+
+Here's the MLJ equivalent of the "hello world" of ML tutorials — training a decision tree on the Iris dataset:
+
+```julia
+using MLJ
+import DataFrames
+
+# Load and shape the data
+iris = load_iris()
+iris = DataFrames.DataFrame(iris)
+y, X = unpack(iris, ==(:target); rng=123)
+
+# Load a model type from its package (this triggers a one-time precompile)
+Tree = @load DecisionTreeClassifier pkg=DecisionTree
+tree = Tree(max_depth=3)
+
+# Bind model + data into a "machine"
+mach = machine(tree, X, y)
+
+# Train/test split and fit
+train, test = partition(eachindex(y), 0.7, shuffle=true, rng=123)
+fit!(mach, rows=train)
+
+# Predict
+yhat = predict(mach, X[test, :])       # a vector of probability distributions
+yhat_labels = predict_mode(mach, X[test, :])  # hard class labels
+
+# Evaluate
+accuracy(yhat_labels, y[test])
+```
+
+Compare this to the scikit-learn version most people already know by heart:
+
+```python
+from sklearn.datasets import load_iris
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+X, y = load_iris(return_X_y=True, as_frame=True)
+X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.7, random_state=123)
+
+tree = DecisionTreeClassifier(max_depth=3)
+tree.fit(X_train, y_train)
+
+y_pred = tree.predict(X_test)
+accuracy_score(y_test, y_pred)
+```
+
+The shapes are recognizably similar — that's deliberate, MLJ's authors were clearly inspired by scikit-learn's ergonomics. The differences that matter start to show up once you go past this toy example, so let's go through the concepts one at a time.
+
+## Core concept: scientific types
+
+Scikit-learn infers what to do with a column mostly from its NumPy/pandas dtype: `float64` is treated as continuous, `object` or `category` is treated as categorical. This works until it doesn't — a `float64` column of zip codes or a `int64` column that's secretly an ordinal rating will silently be treated as continuous, and you find out three weeks later when your model puts a coefficient on "customer ID."
+
+MLJ sidesteps this with **scientific types** (from `ScientificTypes.jl`), a layer that sits on top of Julia's machine types and describes *what the data means* rather than *how it's stored*:
+
+```julia
+using MLJ
+
+X = (age = [23, 45, 31, 60],
+     rating = [3, 5, 2, 4],
+     zip = ["10001", "94110", "10001", "60601"])
+
+schema(X)
+```
+
+```
+┌────────┬────────────┬─────────┐
+│ names  │ scitypes   │ types   │
+├────────┼────────────┼─────────┤
+│ age    │ Count      │ Int64   │
+│ rating │ Count      │ Int64   │
+│ zip    │ Textual    │ String  │
+└────────┴────────────┴─────────┘
+```
+
+`rating` and `zip` are both stored as numbers/strings, but neither is `Continuous`, and MLJ will refuse to silently feed them to a model that expects `Continuous` input. You fix it explicitly:
+
+```julia
+X2 = coerce(X, :age => Continuous,
+               :rating => OrderedFactor,
+               :zip => Multiclass)
+```
+
+Every MLJ model declares, as part of its metadata, exactly which scitypes it accepts for input and target (`input_scitype`, `target_scitype`). `models()` and `info()` let you query this:
+
+```julia
+info("DecisionTreeClassifier", pkg="DecisionTree")
+```
+
+This gives you a compile-time-checkable contract between your data and your model, instead of a runtime `ValueError` (or, worse, no error at all and a model that trains on garbage).
+
+## Core concept: the model registry
+
+Instead of `from sklearn.linear_model import LogisticRegression`, MLJ has a searchable registry of every model implementing its interface, across every package that plugs into it:
+
+```julia
+using MLJ
+
+models()                                    # everything
+models("Forest")                            # filter by name
+models(matching(X, y))                      # models compatible with your data's scitypes
+models(m -> m.is_supervised && m.is_pure_julia && m.prediction_type == :probabilistic)
+```
+
+Loading a model is a macro call, not an import statement, because the same model name can be implemented by more than one package (there are, for example, several `RandomForestClassifier`s from different backends):
+
+```julia
+Tree = @load DecisionTreeClassifier pkg=DecisionTree
+XGB  = @load XGBoostClassifier pkg=XGBoost
+```
+
+`@load` triggers Julia's just-in-time compilation of that package the first time it's called in a session — this is convenient (you only pay for what you use) but it's also the single biggest ergonomic complaint people have about MLJ, which we'll come back to in the shortcomings section.
+
+## Core concept: machines
+
+This is the part of MLJ that has no real scikit-learn equivalent, and it's the hinge the rest of the composition story swings on.
+
+In scikit-learn, an estimator *is* both the hyperparameter container and, after `.fit()`, the holder of learned state (`coef_`, `feature_importances_`, and so on) — one object, two responsibilities. In MLJ these are split:
+
+```julia
+tree = Tree(max_depth=3)         # just hyperparameters, no data, immutable-ish
+mach = machine(tree, X, y)       # binds model + data + (eventually) learned state
+fit!(mach, rows=train)           # trains, caching fitresult inside `mach`
+```
+
+A `machine` also transparently caches intermediate computation, which matters a lot once models are composed: in a pipeline of `Standardizer |> PCA |> RidgeRegressor`, refitting after only changing the ridge's `lambda` will *not* recompute the standardization or PCA — MLJ's dependency graph knows only the downstream node changed. Scikit-learn's `Pipeline.fit()` has no such fine-grained caching by default (you can bolt on `memory=` with joblib, but it's opt-in and file-cache based rather than built into the object graph).
+
+This model/machine split is also what lets the *same* model object be reused across multiple machines bound to different data (useful in cross-validation and stacking internals), and it's the foundation the whole learning-network system below is built on.
+
+## Pipelines
+
+For the common case — a straight line of transformers ending in one predictor — MLJ has a `|>` pipe operator that reads left to right, similar in spirit to scikit-learn's `Pipeline` or `make_pipeline`:
+
+```julia
+using MLJ
+
+OneHotEncoder = @load OneHotEncoder pkg=MLJModels
+KNN = @load KNNRegressor pkg=NearestNeighborModels
+
+pipe = (X -> coerce(X, :age => Continuous)) |>
+       ContinuousEncoder() |>
+       Standardizer() |>
+       OneHotEncoder() |>
+       KNN(K=3)
+```
+
+Every component's hyperparameters remain individually addressable — no `step__param` string munging:
+
+```julia
+pipe.knn.K = 5
+pipe.one_hot_encoder.drop_last = true
+
+evaluate(pipe, X, y, resampling=CV(nfolds=5), measure=rms)
+```
+
+The scikit-learn version of roughly the same pipeline:
+
+```python
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.neighbors import KNeighborsRegressor
+
+preprocess = ColumnTransformer([
+    ("num", StandardScaler(), numeric_cols),
+    ("cat", OneHotEncoder(), categorical_cols),
+])
+
+pipe = Pipeline([
+    ("preprocess", preprocess),
+    ("knn", KNeighborsRegressor(n_neighbors=3)),
+])
+
+pipe.set_params(knn__n_neighbors=5, preprocess__cat__drop="first")
+```
+
+Functionally these are close cousins. The meaningful difference shows up with **target transformations**. In scikit-learn, transforming the target (e.g., regressing on `log(y)` and un-transforming predictions back to `y`'s scale) requires wrapping the whole pipeline in a separate `TransformedTargetRegressor`, which sits outside the `Pipeline` object and isn't tunable together with it in the same nested-parameter grid without extra ceremony. MLJ treats target transformation as just another composable, tunable component:
+
+```julia
+using MLJ
+
+Ridge = @load RidgeRegressor pkg=MLJLinearModels
+
+model = TransformedTargetModel(Ridge(lambda=0.1), transform=UnivariateBoxCoxTransformer())
+mach = machine(model, X, y)
+fit!(mach)
+predict(mach, Xnew)   # automatically un-transforms back to y's original scale
+```
+
+`transform` here can itself be a *learned* transformer (fit on the training target, not a fixed closed-form function), which brings us to the next section — because a target transformer, a supervised model, and a feature transformer are all, structurally, the same kind of thing to MLJ: a node in a graph.
+
+## Learning networks: composition beyond pipelines
+
+This is MLJ's headline architectural difference from scikit-learn. A `Pipeline` — in either library — is a linear chain. Real workflows are frequently not linear: you might want to feed a model's predictions back in as a feature for a second model, blend two models' outputs with learned weights, or route different feature subsets through entirely different sub-pipelines before recombining them. Scikit-learn handles some of this with `FeatureUnion`/`ColumnTransformer` (parallel branches that concatenate) and stacking estimators (fixed two-level structure), but arbitrary directed-acyclic-graph composition isn't really supported as a first-class citizen.
+
+MLJ's **learning networks** let you build exactly that, using ordinary Julia code and "nodes" that behave like lazily-evaluated stand-ins for your data:
+
+```julia
+using MLJ
+
+Xs = source(X)
+ys = source(y)
+
+# Standardize, then predict with two different models
+stand = machine(Standardizer(), Xs)
+W = transform(stand, Xs)
+
+ridge = machine(RidgeRegressor(lambda=0.1), W, ys)
+knn   = machine(KNNRegressor(K=5), W, ys)
+
+# Blend the two models' predictions with a learned weight
+weighted = 0.6 * predict(ridge, W) + 0.4 * predict(knn, W)
+
+fit!(weighted, rows=train)
+weighted()                      # evaluate the whole graph on training data
+```
+
+Every intermediate quantity (`W`, `weighted`, the two `predict(...)` calls) is a `Node` — nothing is computed until you ask for it, and MLJ figures out the minimal recomputation needed when you change a hyperparameter upstream, exactly like the machine caching described earlier, just generalized to an arbitrary graph instead of a line.
+
+Once you're happy with a network, you can export it as a brand-new, ordinary-looking MLJ model (so it can itself be nested inside another pipeline, tuned, or stacked) with the `@from_network` macro:
+
+```julia
+weighted_blend = @from_network WeightedBlend(ridge=ridge, knn=knn) <= weighted
+```
+
+There is genuinely no scikit-learn equivalent to this — the closest analogues (`FeatureUnion`, custom `TransformerMixin` subclasses that call `.fit()`/`.predict()` on sub-estimators by hand) require dropping out of the declarative API and writing imperative glue code. In MLJ, the network *is* the declarative API.
+
+## Hyperparameter tuning
+
+`TunedModel` wraps any model (including a whole pipeline or learning network) into a self-tuning version of itself:
+
+```julia
+using MLJ
+
+Forest = @load RandomForestRegressor pkg=DecisionTree
+
+forest = Forest()
+r1 = range(forest, :n_trees, lower=50, upper=500)
+r2 = range(forest, :max_depth, lower=2, upper=20)
+
+self_tuning_forest = TunedModel(
+    model = forest,
+    tuning = RandomSearch(),
+    resampling = CV(nfolds=5),
+    range = [r1, r2],
+    measure = rms,
+    n = 50,
+)
+
+mach = machine(self_tuning_forest, X, y)
+fit!(mach)
+
+fitted_params(mach).best_model
+report(mach).best_history_entry
+predict(mach, Xnew)               # predicts using the best model, refit on all data
+```
+
+Because a whole pipeline is just a model, ranges compose over nested hyperparameters with dot-path syntax:
+
+```julia
+r = range(pipe, :(knn.K), lower=1, upper=30, scale=:log)
+tuned_pipe = TunedModel(model=pipe, range=r, tuning=Grid(resolution=15), resampling=CV())
+```
+
+The scikit-learn equivalent:
+
+```python
+from sklearn.model_selection import RandomizedSearchCV
+
+param_distributions = {
+    "n_estimators": range(50, 500),
+    "max_depth": range(2, 20),
+}
+search = RandomizedSearchCV(RandomForestRegressor(), param_distributions,
+                             n_iter=50, cv=5, scoring="neg_root_mean_squared_error")
+search.fit(X, y)
+search.best_estimator_
+```
+
+Both are equally usable at this shallow depth. The difference reappears at nested-pipeline depth: sklearn's `step__substep__param` string keys are stringly-typed (typos fail silently or at fit time with a sometimes-confusing error), while MLJ's `range(pipe, :(knn.K), ...)` is checked against the actual object graph. MLJ also treats tuning strategies as pluggable and composable with the rest of the ecosystem (you can register a new `TuningStrategy` type the same way you'd register a new model), whereas scikit-learn's search classes are a closed set you subclass from scratch to extend.
+
+## Resampling and evaluation
+
+```julia
+using MLJ
+
+evaluate(tree, X, y,
+    resampling = StratifiedCV(nfolds=10, rng=123),
+    measures = [accuracy, log_loss, balanced_accuracy],
+    verbosity = 0)
+```
+
+This returns per-fold scores, means, standard errors, and (optionally) per-observation predictions in one `PerformanceEvaluation` object. `resampling` accepts `Holdout`, `CV`, `StratifiedCV`, `TimeSeriesCV`, `InSample`, or a hand-built list of `(train_idx, test_idx)` pairs — directly comparable to scikit-learn's `cross_validate` with `KFold`/`StratifiedKFold`/`TimeSeriesSplit`:
+
+```python
+from sklearn.model_selection import cross_validate, StratifiedKFold
+
+cross_validate(tree, X, y,
+    cv=StratifiedKFold(n_splits=10, random_state=123, shuffle=True),
+    scoring=["accuracy", "neg_log_loss", "balanced_accuracy"])
+```
+
+Functionally near-identical. `measures()` in MLJ lists and searches the full metric catalog the way `sklearn.metrics.get_scorer_names()` does for scikit-learn.
+
+## Ensembling and stacking
+
+Simple bagging wraps any model:
+
+```julia
+using MLJ
+
+Tree = @load DecisionTreeRegressor pkg=DecisionTree
+bagged_tree = EnsembleModel(model=Tree(), n=100, bagging_fraction=0.8)
+```
+
+Stacking combines heterogeneous base learners under a metalearner, and — unlike scikit-learn's `StackingClassifier`/`StackingRegressor`, which are fixed two-level constructs — is itself just a specific learning network under the hood, so it composes with everything else in this post:
+
+```julia
+using MLJ
+
+stack = Stack(
+    metalearner = LinearRegressor(),
+    resampling = CV(nfolds=5),
+    tree_shallow = DecisionTreeRegressor(max_depth=2),
+    tree_deep = DecisionTreeRegressor(max_depth=8),
+    knn = KNNRegressor(),
+    xgb = XGBoostRegressor(),
+)
+
+mach = machine(stack, X, y)
+evaluate!(mach, resampling=Holdout(), measure=rmse)
+```
+
+```python
+from sklearn.ensemble import StackingRegressor
+from sklearn.linear_model import LinearRegression
+
+stack = StackingRegressor(
+    estimators=[
+        ("tree_shallow", DecisionTreeRegressor(max_depth=2)),
+        ("tree_deep", DecisionTreeRegressor(max_depth=8)),
+        ("knn", KNeighborsRegressor()),
+        ("xgb", XGBRegressor()),
+    ],
+    final_estimator=LinearRegression(),
+    cv=5,
+)
+```
+
+Nearly a wash for this common case — MLJ's advantage here is that `stack` can itself be dropped into a `TunedModel`, a learning network, or nested inside another stack without special-casing, because in MLJ "stack" isn't a different kind of object from "model."
+
+## Iterative models and early stopping
+
+Scikit-learn's early stopping is implemented per-estimator, inconsistently — `SGDClassifier` has `early_stopping`/`n_iter_no_change`, `GradientBoostingClassifier` has `n_iter_no_change`/`validation_fraction`, and plenty of estimators have no early-stopping support at all. MLJ instead has a single generic wrapper, `IteratedModel`, that adds stopping controls to *any* model exposing an iteration parameter:
+
+```julia
+using MLJ
+
+iterated_forest = IteratedModel(
+    model = XGBoostRegressor(),
+    resampling = Holdout(fraction_train=0.7),
+    measure = rms,
+    controls = [Step(5), Patience(3), NumberLimit(500), InvalidValue()],
+    retrain = true,
+)
+
+mach = machine(iterated_forest, X, y)
+fit!(mach)
+```
+
+`controls` is an extensible list — `Patience`, `GL` (generalization-loss stopping), `NumberLimit`, `TimeLimit`, `Callback`, `Save` (periodic checkpointing) — that apply identically whether the wrapped model is a gradient-boosted tree, a neural network, or a hand-written iterative algorithm implementing the right interface.
+
+## Probabilistic predictions
+
+For a probabilistic classifier, scikit-learn's `.predict()` returns hard labels and `.predict_proba()` returns a separate `(n_samples, n_classes)` array you have to keep aligned with `.classes_` yourself. MLJ's `predict` on a probabilistic model returns actual distribution objects (`UnivariateFinite` for categorical outcomes, or a `Distributions.jl` type like `Normal` for probabilistic regressors):
+
+```julia
+yhat = predict(mach, Xnew)      # Vector{UnivariateFinite{...}}
+yhat[1]                         # UnivariateFinite(setosa=>0.02, versicolor=>0.9, virginica=>0.08)
+pdf(yhat[1], "versicolor")      # 0.9
+mode(yhat[1])                   # "versicolor"
+mean(yhat[1])                   # for a Normal-valued regressor: E[y | x]
+log_loss(yhat, y_test)          # metrics consume the distributions directly
+```
+
+This is a genuinely nicer abstraction: the distribution *is* the prediction, so uncertainty, sampling, log-loss, calibration, and hard-label extraction are all operations on one object rather than a scavenger hunt across `.predict()`, `.predict_proba()`, `.decision_function()`, and `.classes_`.
+
+## Deep learning via MLJFlux
+
+[`MLJFlux.jl`](https://github.com/FluxML/MLJFlux.jl) wraps Julia's `Flux.jl` deep learning library so neural nets slot into the same `machine`/`fit!`/`evaluate`/`TunedModel`/`IteratedModel` machinery as everything else:
+
+```julia
+using MLJ, MLJFlux
+
+NeuralNetworkClassifier = @load NeuralNetworkClassifier pkg=MLJFlux
+
+clf = NeuralNetworkClassifier(epochs=50, batch_size=32)
+
+iterated_clf = IteratedModel(
+    model = clf,
+    resampling = Holdout(fraction_train=0.7),
+    measure = log_loss,
+    controls = [Step(1), Patience(4), NumberLimit(200)],
+)
+
+mach = machine(iterated_clf, X, y)
+fit!(mach)
+```
+
+Scikit-learn has no equivalent at all (`MLPClassifier` is a plain multilayer perceptron and is explicitly not meant for anything resembling modern deep learning) — but it's worth being clear-eyed that this is closer to "scikit-learn intentionally doesn't try" than "MLJ wins the deep learning fight." MLJFlux is a genuinely convenient way to get a neural net using MLJ's tuning/evaluation/composition tooling; it is not a competitor to PyTorch or the Python deep learning ecosystem in scale, GPU tooling maturity, or pretrained-model availability, and nobody serious is choosing MLJFlux over PyTorch for a large vision or language model.
+
+## Persistence and parallelism
+
+Saving and reloading a trained machine:
+
+```julia
+MLJ.save("model.jls", mach)
+mach2 = machine("model.jls")
+predict(mach2, Xnew)
+```
+
+roughly analogous to `joblib.dump`/`joblib.load`, though without the ecosystem of deployment tooling (model registries, `ONNX` export, serving frameworks) that's grown up around scikit-learn's pickle-based story — more on that below.
+
+Parallelism for resampling/tuning is a keyword, not a different library:
+
+```julia
+evaluate(model, X, y, resampling=CV(nfolds=10), acceleration=CPUThreads())
+# or across a Julia cluster:
+evaluate(model, X, y, resampling=CV(nfolds=10), acceleration=CPUProcesses())
+```
+
+versus scikit-learn's `n_jobs=-1`, which under the hood spins up `joblib`/`multiprocessing` worker processes to work around Python's GIL. Julia has no GIL, so `CPUThreads()` parallelism is genuinely shared-memory multithreading rather than separate processes — lighter weight, though the ceiling depends on how much of the underlying model-fitting code itself is thread-safe and multithreaded, which varies by backend package just as scikit-learn's actual speedup varies by estimator.
+
+## Side-by-side: the same workflow in both
+
+To make the comparison concrete, here's one realistic end-to-end task — impute, scale, one-hot encode, fit a gradient-boosted tree, tune two hyperparameters by 5-fold CV, and report held-out RMSE — written both ways.
+
+**MLJ.jl:**
+
+```julia
+using MLJ
+
+XGBoostRegressor = @load XGBoostRegressor pkg=XGBoost
+
+pipe = (X -> coerce(X, autotype(X, :few_to_finite))) |>
+       FillImputer() |>
+       ContinuousEncoder() |>
+       Standardizer() |>
+       XGBoostRegressor()
+
+r1 = range(pipe, :(xg_boost_regressor.max_depth), lower=2, upper=10)
+r2 = range(pipe, :(xg_boost_regressor.eta), lower=0.01, upper=0.3, scale=:log)
+
+tuned = TunedModel(model=pipe, tuning=RandomSearch(), range=[r1, r2],
+                    resampling=CV(nfolds=5), measure=rmse, n=40)
+
+mach = machine(tuned, X, y)
+train, test = partition(eachindex(y), 0.8, shuffle=true, rng=1)
+fit!(mach, rows=train)
+
+rmse(predict(mach, X[test, :]), y[test])
+```
+
+**scikit-learn:**
+
+```python
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import RandomizedSearchCV, train_test_split
+from sklearn.metrics import root_mean_squared_error
+from xgboost import XGBRegressor
+
+numeric = Pipeline([("impute", SimpleImputer()), ("scale", StandardScaler())])
+categorical = Pipeline([("impute", SimpleImputer(strategy="most_frequent")),
+                         ("onehot", OneHotEncoder(handle_unknown="ignore"))])
+preprocess = ColumnTransformer([("num", numeric, numeric_cols),
+                                 ("cat", categorical, categorical_cols)])
+
+pipe = Pipeline([("preprocess", preprocess), ("xgb", XGBRegressor())])
+
+param_distributions = {
+    "xgb__max_depth": range(2, 10),
+    "xgb__eta": [0.01, 0.03, 0.1, 0.3],
+}
+
+search = RandomizedSearchCV(pipe, param_distributions, n_iter=40, cv=5,
+                             scoring="neg_root_mean_squared_error")
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.8, random_state=1)
+search.fit(X_train, y_train)
+
+root_mean_squared_error(y_test, search.predict(X_test))
+```
+
+Line-for-line these are almost interchangeable in *effort*. This is the honest takeaway for the 80% case: for a single linear preprocessing-plus-model pipeline tuned by cross-validation, MLJ.jl and scikit-learn are roughly equally pleasant to use, and picking one over the other for this kind of task is really a language choice (Julia vs. Python), not a framework-quality choice. The gap opens up specifically when your workflow stops being a straight line — nested/non-linear composition, learned target transformations, blending model outputs, or needing tuning to reach inside a deeply nested composite cleanly.
+
+## Feature comparison table
+
+| Capability | MLJ.jl | scikit-learn |
+|---|---|---|
+| Unified `fit`/`predict`-style API | Yes (`machine`/`fit!`/`predict`) | Yes (`.fit()`/`.predict()`) |
+| Number of models available | 200+, spanning many backend packages (Julia, R, Python via wrappers) | 100+ built-in, plus a very large third-party ecosystem (XGBoost, LightGBM, imbalanced-learn, etc.) |
+| Linear pipelines | Yes, `\|>` operator | Yes, `Pipeline`/`make_pipeline` |
+| Non-linear / arbitrary DAG composition | Yes, first-class (learning networks) | No native equivalent; requires custom estimator classes |
+| Learned target transformation | First-class, composable, tunable (`TransformedTargetModel`) | Supported via a separate wrapper class, less composable |
+| Nested hyperparameter access | Direct property access (`pipe.step.param`) | String-keyed (`step__param`) |
+| Explicit data-type system | Yes (scientific types: `Continuous`, `Multiclass`, etc.) | No; relies on NumPy/pandas dtypes |
+| Probabilistic predictions | Native `Distributions.jl` objects | Separate `predict_proba`/`decision_function` methods |
+| Stacking | Native, itself a learning network | `StackingClassifier`/`StackingRegressor`, fixed structure |
+| Generic early stopping | `IteratedModel` wraps any iterative model | Per-estimator, inconsistent support |
+| Deep learning | Via `MLJFlux.jl` (Flux.jl backend) | None (MLPClassifier only; not competitive with real DL frameworks) |
+| GPU support | Limited, backend-dependent | None natively; some GPU-accelerated forks exist (cuML, Intel extension) |
+| Parallelism | Native multithreading/distributed, no GIL | Process-based via `joblib`, subject to the GIL for pure-Python code |
+| Fine-grained fit caching | Built into the machine/node graph | Opt-in, coarse, via `joblib` memory caching |
+| Documentation depth | Good, but noticeably thinner than scikit-learn's | Extensive, mature, huge example gallery |
+| Community size / Q&A availability | Small relative to Python's ML community | Enormous — the default reference for ML APIs |
+| Production/MLOps tooling (serving, ONNX export, model registries) | Thin | Mature and broad ecosystem |
+| Startup / first-call latency | Noticeable (Julia JIT + package precompilation) | Negligible |
+| Language | Julia (fast, JIT-compiled, no separate "vectorize or drop to C" step needed) | Python (slower interpreter; performance-critical code is C/Cython under the hood) |
+
+## Where MLJ.jl is genuinely superior
+
+**Composability that goes past straight lines.** This is the real headline. Once a project needs a model whose output feeds into another model, a metalearner blending several base learners with learned weights, or a target transformation that's itself fit on training data, scikit-learn requires writing custom estimator classes that manually orchestrate `.fit()`/`.predict()` calls on sub-estimators. MLJ's learning networks make this declarative, and — critically — whatever you build this way is automatically tunable, cross-validatable, and nestable inside something bigger, because it's just another model once exported.
+
+**A real type system for data.** Scientific types catch an entire class of "silently trained on the wrong kind of column" bugs at the point of model construction rather than three sprints later when someone notices the feature importances look insane. This matters more than it sounds like it should, especially on teams where the person building the pipeline isn't the person who profiled the raw data.
+
+**Predictions as distributions, not arrays.** Getting `mean`, `pdf`, `mode`, and `log_loss` to all operate on the same object instead of juggling `.predict()`, `.predict_proba()`, and `.classes_` in sync is a small thing individually but removes a recurring source of index-alignment bugs, particularly in multiclass settings.
+
+**Nested hyperparameters without string keys.** `pipe.knn.K = 5` and `range(pipe, :(knn.K), ...)` are checked against the real object graph; `"knn__K"` is checked against nothing until scikit-learn tries to look it up and fails (or worse, doesn't fail, if you have a typo that happens to match a `**kwargs` sink).
+
+**No GIL, real shared-memory parallelism, and one language end to end.** Data wrangling (`DataFrames.jl`), visualization (`Makie.jl`/`Plots.jl`), and modeling (MLJ) all run as native, JIT-compiled Julia. You never need to drop into C/Cython for a custom estimator to be fast the way you sometimes do in Python — a hand-written Julia model in a tight loop is often competitive with a hand-written C extension.
+
+**Generic iteration control.** `IteratedModel` applying `Patience`, `NumberLimit`, `TimeLimit`, and checkpointing uniformly to any iterative model (boosted trees, neural nets, or your own custom algorithm) beats scikit-learn's estimator-by-estimator, inconsistent early-stopping support.
+
+## Where MLJ.jl falls short
+
+It would be dishonest to write this post without being equally direct here, and anyone evaluating MLJ.jl for real work should weigh these seriously.
+
+**Latency.** Julia's just-in-time compilation means the *first* time you call `@load` on a model, or the first time you call a function with a new combination of argument types, there's a real, sometimes multi-second pause while Julia compiles. This is a well-known, actively-discussed pain point in the Julia community generally (there's an open GitHub issue literally titled ["`@load` is too slow"](https://github.com/alan-turing-institute/MLJ.jl/issues/280)), and it's the single most common complaint from people trying MLJ for the first time coming from Python, where `import` is instantaneous. It matters much less in long-running training jobs and much more in notebooks, REPL exploration, and short scripts.
+
+**Ecosystem and community size.** Julia's ML community is a small fraction of Python's. That translates concretely into fewer Stack Overflow answers, fewer blog posts and tutorials (this one included, relatively speaking), fewer third-party extensions, and a much smaller pool of engineers who already know the tool if you're hiring. When something breaks in an obscure corner of a niche backend package, you may be the first person to hit it.
+
+**Documentation, while solid, is thinner.** MLJ's docs cover the core API well, but scikit-learn's documentation — the user guide, the enormous example gallery, the "choosing the right estimator" flowchart — represents over a decade of a much larger project accumulating polish. Some MLJ satellite packages (individual model-interface packages) have sparse or out-of-date docs relative to the core.
+
+**Production and MLOps tooling.** Scikit-learn sits at the center of a mature deployment ecosystem — ONNX export, MLflow/Weights & Biases integrations, serving frameworks, feature stores that speak its conventions. MLJ's persistence story (`MLJ.save`) is functional but the surrounding tooling for shipping a model into a production serving stack is comparatively thin, and you'll do more of it yourself.
+
+**Deep learning is not competitive.** `MLJFlux.jl` is a genuinely nice way to get a neural net under MLJ's tuning and evaluation umbrella, but neither it nor `Flux.jl` itself competes with PyTorch or JAX in ecosystem depth, pretrained model availability, or GPU tooling maturity. If your work is deep-learning-heavy, you're going to end up in Python (or at minimum, calling out to it) regardless of what you use for classical ML.
+
+**Package churn and compilation overhead compound with the number of dependencies.** Because MLJ pulls in many small interface packages, adding a new model type to a project can mean adding a new precompilation dependency, and Julia's package ecosystem — while much better than it used to be — still has more version-compatibility friction across a large dependency graph than pip/conda-installed scikit-learn typically does.
+
+**You're learning two things, not one.** Scikit-learn assumes you already know Python. MLJ assumes you already know Julia — a language with its own paradigm (multiple dispatch), its own package manager conventions, and its own debugging idioms. That's a real cost if your team doesn't already use Julia for other reasons (numerics, differential equations, simulation-heavy workloads where Julia genuinely excels).
+
+## So which should you use?
+
+If you're already in the Julia ecosystem — doing scientific computing, simulation, or numerics where Julia's speed and composability already pay for themselves — MLJ.jl is a very well-designed, thoughtfully-architected ML layer that will feel like a natural extension of the language, and for workflows involving genuinely non-linear model composition, it will actively save you from writing the custom orchestration code scikit-learn would force on you.
+
+If you're not already committed to Julia, or your work leans heavily on deep learning, or you need to hire for this skill set, or you need mature production deployment tooling out of the box, scikit-learn (and the wider Python ML ecosystem around it) remains the safer, more battle-tested default — not because its design is better in every respect, but because ecosystem maturity and community size are themselves features, and on those two axes Python's lead over Julia in machine learning is still substantial.
+
+The honest summary: MLJ.jl is the more elegantly *architected* of the two frameworks in several concrete, demonstrable ways — composition, scientific typing, and probabilistic predictions chief among them. Scikit-learn is the more *complete* one, by virtue of a decade's head start and an ecosystem an order of magnitude larger. Good architecture is worth seeking out; ecosystem maturity is worth not underestimating. Which one wins for you depends entirely on which of those two things your project needs more.
+
+---
+
+*Further reading: the [MLJ.jl documentation](https://juliaai.github.io/MLJ.jl/stable/), the [MLJ GitHub repository](https://github.com/JuliaAI/MLJ.jl), and the [MLJFlux.jl repository](https://github.com/FluxML/MLJFlux.jl) for the deep learning integration.*
