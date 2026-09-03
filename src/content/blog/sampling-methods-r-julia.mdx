@@ -1,0 +1,387 @@
+---
+title: "A Practical Guide to Sampling Methods, in R and Julia"
+description: "Simple random, systematic, stratified, and cluster sampling, plus the bootstrap — explained with the math, implemented in both R and Julia, and checked with a Monte Carlo simulation that shows exactly why stratified sampling wins and cluster sampling doesn't."
+date: "2026-09-03"
+tags: ["statistics", "r", "julia", "data-science", "sampling"]
+author: "Vivek Raj"
+cover: "/images/covers/sampling-methods-r-julia.jpg"
+---
+
+You almost never get to measure an entire population. You survey 1,000 voters, not the electorate; you test 300 devices off a production line, not every device; you profile 10,000 rows of a dataset with a billion rows because pulling all of it would take a week. **Sampling** is the machinery that lets a carefully chosen subset stand in for the whole — and *how* you choose that subset changes the accuracy of every estimate built on top of it, sometimes dramatically.
+
+This post covers the four classical probability-sampling designs — simple random, systematic, stratified, and cluster — plus the bootstrap, a fundamentally different, computational resampling method. Every method gets its math, R and Julia implementations, and at the end, a Monte Carlo simulation that doesn't just assert "stratified sampling reduces variance" but actually measures it happening.
+
+## Table of contents
+
+1. [Population, sample, and sampling frame](#population-sample-and-sampling-frame)
+2. [Probability vs. non-probability sampling](#probability-vs-non-probability-sampling)
+3. [Simple random sampling](#simple-random-sampling)
+4. [Systematic sampling](#systematic-sampling)
+5. [Stratified sampling](#stratified-sampling)
+6. [Cluster sampling](#cluster-sampling)
+7. [Multistage sampling](#multistage-sampling)
+8. [The bootstrap: resampling from the sample itself](#the-bootstrap-resampling-from-the-sample-itself)
+9. [Putting it to the test: a Monte Carlo comparison](#putting-it-to-the-test-a-monte-carlo-comparison)
+10. [Bootstrap in action: the standard error of a median](#bootstrap-in-action-the-standard-error-of-a-median)
+11. [Comparison table](#comparison-table)
+12. [How to choose](#how-to-choose)
+
+## Population, sample, and sampling frame
+
+The **population** is everyone or everything you'd ideally measure. The **sample** is the subset you actually measure. The **sampling frame** is the list you actually sample *from* — and it's worth naming separately because it's a common, quiet source of bias: if your frame is "everyone who answered our email survey," your population is implicitly "people who read email and respond to surveys," which is a real, different, and usually unacknowledged population.
+
+Every method below assumes you have a workable sampling frame and answers the same question differently: *given that frame, which units do we actually select, and how does that choice affect our estimates?*
+
+## Probability vs. non-probability sampling
+
+**Probability sampling** means every unit in the population has a known, non-zero chance of selection — which is what makes it possible to compute unbiased estimates and honest error bars at all. Simple random, systematic, stratified, and cluster sampling are all probability methods, and they're the focus of this post.
+
+**Non-probability sampling** — convenience sampling (whoever's easiest to reach), quota sampling (fill demographic buckets without random selection inside them), snowball sampling (ask participants to refer others) — trades away that guarantee for speed and cost. It can be the right practical call, but the tradeoff is real: without known selection probabilities, there's no valid way to quantify how far a non-probability sample's estimates might be from the truth, only informal judgment about how representative it "seems."
+
+## Simple random sampling
+
+**Simple random sampling (SRS)** gives every unit, and every subset of a given size, an equal chance of selection — the "put every name in a hat" method, and the baseline every other design is compared against.
+
+For a sample mean $\bar{x}$ estimating a population mean $\mu$, SRS is unbiased: $E[\bar{x}] = \mu$. Its variance depends on whether you sample with or without replacement. Sampling **without replacement** from a finite population of size $N$ (the far more common real-world case):
+
+$$
+\text{Var}(\bar{x}) = \frac{\sigma^2}{n}\left(1 - \frac{n}{N}\right)
+$$
+
+The $\left(1 - \frac{n}{N}\right)$ term is the **finite population correction** — it shrinks toward zero as your sample covers more of the population (sample the whole population, $n = N$, and variance is correctly zero), and it's often dropped entirely when $N$ is large relative to $n$, which is why you'll usually just see $\sigma^2/n$.
+
+```r
+set.seed(42)
+population <- rnorm(10000, mean = 50, sd = 10)
+
+srs_sample <- sample(population, size = 300, replace = FALSE)
+mean(srs_sample)
+sd(srs_sample) / sqrt(length(srs_sample))   # estimated standard error
+```
+
+```julia
+using Random, Statistics
+
+Random.seed!(42)
+population = 50 .+ 10 .* randn(10000)
+
+srs_sample = shuffle(population)[1:300]     # shuffle, take the first n -> sampling without replacement
+mean(srs_sample)
+std(srs_sample) / sqrt(length(srs_sample))
+```
+
+## Systematic sampling
+
+**Systematic sampling** picks a random starting point, then takes every $k$-th unit from the frame, where $k \approx N/n$. It's operationally simpler than SRS (no need to generate $n$ independent random draws — one random start, then a fixed stride) and, when the frame is in no particular meaningful order, behaves almost identically to SRS.
+
+The catch: if the frame has **periodicity** that happens to line up with your stride $k$, systematic sampling can go badly wrong. The textbook example is sampling "every 7th day" of retail sales data — you'd sample the same day of the week every time, and your "sample" would badly misrepresent the full week's pattern.
+
+```r
+systematic_sample <- function(population, n) {
+  N <- length(population)
+  k <- floor(N / n)
+  start <- sample(1:k, 1)
+  idx <- seq(start, N, by = k)[1:n]
+  population[idx]
+}
+
+set.seed(42)
+sys_sample <- systematic_sample(population, 300)
+mean(sys_sample)
+```
+
+```julia
+function systematic_sample(population, n)
+    N = length(population)
+    k = N ÷ n
+    start = rand(1:k)
+    idx = collect(start:k:N)[1:n]
+    population[idx]
+end
+
+Random.seed!(42)
+sys_sample = systematic_sample(population, 300)
+mean(sys_sample)
+```
+
+## Stratified sampling
+
+**Stratified sampling** divides the population into non-overlapping **strata** — groups that are internally as homogeneous as possible — then samples independently within each stratum (most commonly, proportionally to each stratum's share of the population). The strata themselves aren't random; you choose them from something you already know about the population (region, age band, customer tier) that's predictive of the thing you're measuring.
+
+With proportional allocation across $H$ strata, the variance of the stratified mean estimator is:
+
+$$
+\text{Var}(\bar{x}_{st}) = \sum_{h=1}^{H} \left(\frac{N_h}{N}\right)^2 \frac{\sigma_h^2}{n_h}
+$$
+
+Compare this to SRS's $\sigma^2/n$: the population variance $\sigma^2$ in the SRS formula gets replaced by a weighted sum of **within-stratum** variances $\sigma_h^2$. If most of the population's total variance comes from *differences between strata* rather than *differences within them* — exactly the situation you're in when your strata are well-chosen — the within-stratum variances are small, and stratified sampling's variance drops well below SRS's for the same total sample size. Section 9 measures exactly how much.
+
+```r
+set.seed(42)
+strata <- rep(c("A", "B", "C"), times = c(5000, 3000, 2000))
+values <- c(rnorm(5000, 40, 5), rnorm(3000, 60, 8), rnorm(2000, 80, 3))
+pop_df <- data.frame(stratum = strata, value = values)
+
+stratified_sample <- function(df, n_total) {
+  props <- table(df$stratum) / nrow(df)
+  n_h <- round(props * n_total)
+  do.call(rbind, lapply(names(n_h), function(h) {
+    sub <- df[df$stratum == h, ]
+    sub[sample(nrow(sub), n_h[[h]]), ]
+  }))
+}
+
+strat_sample <- stratified_sample(pop_df, 300)
+mean(strat_sample$value)
+```
+
+```julia
+using DataFrames, Random
+
+Random.seed!(42)
+strata = vcat(fill("A", 5000), fill("B", 3000), fill("C", 2000))
+values = vcat(40 .+ 5 .* randn(5000), 60 .+ 8 .* randn(3000), 80 .+ 3 .* randn(2000))
+pop_df = DataFrame(stratum = strata, value = values)
+
+function stratified_sample(df, n_total)
+    n = nrow(df)
+    result = DataFrame()
+    for h in unique(df.stratum)
+        sub = filter(:stratum => ==(h), df)
+        n_h = round(Int, nrow(sub) / n * n_total)
+        idx = shuffle(1:nrow(sub))[1:n_h]
+        result = vcat(result, sub[idx, :])
+    end
+    result
+end
+
+strat_sample = stratified_sample(pop_df, 300)
+mean(strat_sample.value)
+```
+
+## Cluster sampling
+
+**Cluster sampling** also divides the population into groups — but where stratified sampling wants strata that are internally *homogeneous* and then samples *within every one of them*, cluster sampling wants clusters that each look like a mini version of the whole population, then randomly selects a handful of *entire* clusters and measures everyone inside them.
+
+The appeal is almost always logistical: it's far cheaper to survey every household in 20 randomly chosen villages than to survey a random sample of households scattered across every village in the country. The statistical cost shows up through the **design effect**:
+
+$$
+DEFF = 1 + (m - 1)\rho
+$$
+
+where $m$ is the average cluster size and $\rho$ (the intra-cluster correlation) measures how similar units *within* a cluster are to each other. When clusters are naturally homogeneous internally — which is common, since geographic or organizational clusters often share whatever made them a natural grouping in the first place — $\rho$ is high, $DEFF$ is well above 1, and your effective sample size is much smaller than your actual headcount suggests: measuring 200 people from the same village doesn't give you 200 independent looks at the population, closer to $200/DEFF$.
+
+```r
+set.seed(42)
+n_clusters <- 100
+pop_df <- data.frame(
+  cluster = rep(1:n_clusters, each = 100),
+  value = rnorm(10000, mean = 50, sd = 10)
+)
+
+cluster_sample <- function(df, n_clusters_to_pick) {
+  chosen <- sample(unique(df$cluster), n_clusters_to_pick)
+  df[df$cluster %in% chosen, ]
+}
+
+csamp <- cluster_sample(pop_df, 3)   # 3 clusters x 100 = 300, same total n as the other examples
+mean(csamp$value)
+```
+
+```julia
+using DataFrames, Random
+
+Random.seed!(42)
+n_clusters = 100
+pop_df = DataFrame(
+    cluster = repeat(1:n_clusters, inner = 100),
+    value = 50 .+ 10 .* randn(10000)
+)
+
+function cluster_sample(df, n_clusters_to_pick)
+    clusters = unique(df.cluster)
+    chosen = shuffle(clusters)[1:n_clusters_to_pick]
+    filter(:cluster => in(chosen), df)
+end
+
+csamp = cluster_sample(pop_df, 3)
+mean(csamp.value)
+```
+
+## Multistage sampling
+
+Real large-scale surveys rarely use one design in isolation — **multistage sampling** chains designs together: a national health survey might cluster-sample *regions*, then stratify *within* each chosen region by urban/rural, then simple-random-sample *households* within each stratum. Each stage narrows the frame using whichever design fits the structure available at that level, and the overall variance combines the design effects of every stage. It's more a *strategy for composing* the four designs above than a fifth design in its own right.
+
+## The bootstrap: resampling from the sample itself
+
+Every method so far assumes you're drawing from a population you have direct access to. The **bootstrap** solves a different problem: you already have *one* sample, no way to collect more data, and you need to know how uncertain some statistic computed from it is — especially useful for statistics like the median or a correlation coefficient, where a clean closed-form standard-error formula either doesn't exist or requires assumptions you don't want to make.
+
+The idea: treat your sample as a stand-in for the population, and repeatedly resample *from it, with replacement*, at the same size as the original. Each resample gives you one more value of your statistic; the spread of those values across thousands of resamples approximates the statistic's true sampling distribution.
+
+$$
+SE_{\text{boot}} = \sqrt{\frac{1}{B - 1}\sum_{b=1}^{B}\left(\hat{\theta}^*_b - \bar{\hat{\theta}}^*\right)^2}
+$$
+
+where $\hat{\theta}^*_b$ is the statistic computed on the $b$-th bootstrap resample, out of $B$ total resamples, and $\bar{\hat{\theta}}^*$ is their average. Section 10 uses exactly this to put a confidence interval around a sample median.
+
+```r
+sample_data <- rexp(50, rate = 1/10)   # a single, skewed sample -- no more data available
+
+boot_medians <- replicate(2000, {
+  resample <- sample(sample_data, length(sample_data), replace = TRUE)
+  median(resample)
+})
+sd(boot_medians)                          # the bootstrap standard error
+quantile(boot_medians, c(0.025, 0.975))   # a 95% percentile confidence interval
+```
+
+```julia
+using Random, Statistics
+
+Random.seed!(42)
+sample_data = -10 .* log.(rand(50))   # Exponential(mean=10) via inverse-CDF sampling, Base only
+
+boot_medians = [median(rand(sample_data, length(sample_data))) for _ in 1:2000]
+std(boot_medians)
+quantile(boot_medians, [0.025, 0.975])
+```
+
+## Putting it to the test: a Monte Carlo comparison
+
+Formulas claiming one design has lower variance than another are easy to state and easy to take on faith. Instead, here's a population built with a known, deliberately extreme structure, sampled 1,000 times by each of the three designs above — all at the same total sample size, $n=300$ — so the variance differences aren't argued for, they're measured.
+
+The population: 10,000 units in 5 strata of 2,000 each, with very different stratum means (30, 45, 60, 75, 90) but low variation *within* each stratum ($\sigma=5$). Each stratum is further chunked into 20 contiguous clusters of 100 — so every cluster sits entirely inside one stratum, making clusters homogeneous internally and very different from each other, exactly the condition that makes cluster sampling struggle.
+
+```r
+set.seed(42)
+
+N <- 10000
+stratum_means <- c(30, 45, 60, 75, 90)
+strata <- rep(1:5, each = 2000)
+values <- unlist(lapply(1:5, function(h) rnorm(2000, stratum_means[h], 5)))
+clusters <- rep(1:100, each = 100)   # 100 clusters of 100; 20 clusters per stratum
+pop <- data.frame(stratum = strata, cluster = clusters, value = values)
+
+srs_mean <- function() {
+  mean(sample(pop$value, 300, replace = FALSE))
+}
+
+stratified_mean <- function() {
+  means_by_stratum <- sapply(1:5, function(h) {
+    idx <- which(pop$stratum == h)
+    mean(pop$value[sample(idx, 60, replace = FALSE)])
+  })
+  mean(means_by_stratum)   # equal-sized strata -> simple average is the proportional estimate
+}
+
+cluster_mean <- function() {
+  chosen <- sample(1:100, 3, replace = FALSE)   # 3 clusters x 100 = 300
+  mean(pop$value[pop$cluster %in% chosen])
+}
+
+n_reps <- 1000
+srs_estimates <- replicate(n_reps, srs_mean())
+stratified_estimates <- replicate(n_reps, stratified_mean())
+cluster_estimates <- replicate(n_reps, cluster_mean())
+
+cat(sprintf("SRS:        mean=%.3f  SD=%.4f\n", mean(srs_estimates), sd(srs_estimates)))
+cat(sprintf("Stratified: mean=%.3f  SD=%.4f\n", mean(stratified_estimates), sd(stratified_estimates)))
+cat(sprintf("Cluster:    mean=%.3f  SD=%.4f\n", mean(cluster_estimates), sd(cluster_estimates)))
+```
+
+**Output (R):**
+
+```text
+SRS:        mean=59.966  SD=1.2238
+Stratified: mean=59.950  SD=0.2770
+Cluster:    mean=60.394  SD=12.4495
+```
+
+All three are unbiased — every mean is within noise of the population's true mean (59.943) — but the spreads are dramatically different. **Stratified sampling's standard deviation across the 1,000 repeats is about 4.4x smaller than SRS's**: with strata this internally homogeneous, sampling proportionally from every one of them essentially eliminates the between-stratum variance from the estimator entirely, leaving only the small within-stratum noise. **Cluster sampling's standard deviation is about 10.2x *larger* than SRS's**: picking just 3 of 100 clusters, where every cluster's value is essentially its stratum's mean plus a little noise, is a lot closer to picking 3 random numbers from `c(30, 45, 60, 75, 90)`-ish territory than it is to a well-behaved 300-unit sample — the real information content of "300 observations from 3 clusters" is much closer to "3 independent looks at the population" than "300 independent looks," which is precisely what the design effect formula from section 6 predicts.
+
+As a sanity check, the SRS simulation's empirical standard deviation (1.2238) lines up closely with the finite-population-correction formula from section 3 computed directly on this population (1.2402, using the population's true variance) — the theory and the simulation agree.
+
+```julia
+using DataFrames, Random, Statistics
+
+Random.seed!(42)
+N = 10000
+stratum_means = [30, 45, 60, 75, 90]
+strata = repeat(1:5, inner = 2000)
+values = vcat([stratum_means[h] .+ 5 .* randn(2000) for h in 1:5]...)
+clusters = repeat(1:100, inner = 100)
+pop = DataFrame(stratum = strata, cluster = clusters, value = values)
+
+function srs_mean()
+    mean(shuffle(pop.value)[1:300])
+end
+
+function stratified_mean()
+    means_by_stratum = map(1:5) do h
+        idx = findall(==(h), pop.stratum)
+        mean(pop.value[shuffle(idx)[1:60]])
+    end
+    mean(means_by_stratum)
+end
+
+function cluster_mean()
+    chosen = shuffle(1:100)[1:3]
+    mean(pop.value[in.(pop.cluster, Ref(chosen))])
+end
+
+n_reps = 1000
+srs_estimates = [srs_mean() for _ in 1:n_reps]
+stratified_estimates = [stratified_mean() for _ in 1:n_reps]
+cluster_estimates = [cluster_mean() for _ in 1:n_reps]
+
+println("SRS:        mean=", mean(srs_estimates), "  SD=", std(srs_estimates))
+println("Stratified: mean=", mean(stratified_estimates), "  SD=", std(stratified_estimates))
+println("Cluster:    mean=", mean(cluster_estimates), "  SD=", std(cluster_estimates))
+```
+
+The Julia version above mirrors the R simulation's logic exactly, but R and Julia don't share a random number generator, so it won't reproduce the *exact* figures printed above if you run it — only the same qualitative result (stratified far tighter, cluster far wider than SRS), which is the part that's actually structural rather than a quirk of one specific random seed.
+
+## Bootstrap in action: the standard error of a median
+
+Section 8 introduced the bootstrap; here it is estimating uncertainty for a statistic — the median — that doesn't have a simple textbook standard-error formula, on data drawn from an exponential distribution (heavily right-skewed, the kind of shape response-time or claim-size data often has).
+
+```r
+set.seed(42)
+sample_data <- rexp(50, rate = 1/10)   # true median of the generating distribution: 10*log(2) = 6.931
+cat(sprintf("Sample median: %.3f\n", median(sample_data)))
+
+boot_medians <- replicate(2000, {
+  resample <- sample(sample_data, length(sample_data), replace = TRUE)
+  median(resample)
+})
+cat(sprintf("Bootstrap SE of the median: %.3f\n", sd(boot_medians)))
+ci <- quantile(boot_medians, c(0.025, 0.975))
+cat(sprintf("95%% bootstrap percentile CI: [%.3f, %.3f]\n", ci[1], ci[2]))
+```
+
+**Output (R):**
+
+```text
+Sample median: 7.611
+Bootstrap SE of the median: 1.426
+95% bootstrap percentile CI: [5.138, 9.960]
+```
+
+With only 50 observations and a genuinely skewed distribution, the bootstrap needed no formula for "the variance of a median" — a statistic that, unlike the mean, doesn't have one simple closed form — and no assumption that the data were normally distributed. It just resampled, recomputed, and read the uncertainty off the resulting spread. The interval correctly captures the true median of the generating distribution (6.931), and does so from resampling *alone*, with no additional data collected.
+
+## Comparison table
+
+| Method | How it works | Variance behavior | Best when |
+|---|---|---|---|
+| Simple random | Every unit equally likely | Baseline: $\sigma^2/n$ (finite-population corrected) | You have a full, unstructured frame and no useful grouping variable |
+| Systematic | Random start, then every $k$-th unit | ≈ SRS, unless the frame has periodicity | You need an operationally simple, evenly-spread sample from an unordered (or non-periodic) frame |
+| Stratified | Sample within each homogeneous group | Below SRS when within-group variance ≪ between-group variance | You have a variable known to correlate with the outcome, usable to form groups |
+| Cluster | Randomly pick whole groups, measure everyone inside | Above SRS when groups are internally homogeneous (high design effect) | Individual-level sampling is logistically or financially impractical |
+| Bootstrap | Resample with replacement from your one sample | N/A — a resampling method for estimating uncertainty, not a sampling design for collecting data | You need a standard error or CI for a statistic with no clean formula, and can't collect more data |
+
+## How to choose
+
+- **Default to stratified sampling whenever you have a variable that plausibly correlates with what you're measuring** — it's rarely worse than SRS and often dramatically better, for the same sample size and (usually) similar cost.
+- **Reach for cluster sampling only when individual-level sampling is genuinely impractical**, and go in aware you're trading statistical efficiency for logistics — budget for a larger total sample size than an SRS-based power calculation would suggest, scaled up by the expected design effect.
+- **Systematic sampling is a fine, simpler stand-in for SRS** as long as you've checked the frame isn't secretly periodic in a way that lines up with your sampling interval.
+- **Reach for the bootstrap whenever you're stuck with one sample, need uncertainty on a statistic without a clean formula** (medians, ratios, correlations, custom metrics), and can't go collect more data — which, in practice, is most of the time.
