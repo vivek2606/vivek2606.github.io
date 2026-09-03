@@ -7,6 +7,8 @@ author: "Vivek Raj"
 cover: "/images/covers/sampling-methods-r-julia.jpg"
 ---
 
+import CodeRunner from "../../components/CodeRunner.tsx";
+
 You almost never get to measure an entire population. You survey 1,000 voters, not the electorate; you test 300 devices off a production line, not every device; you profile 10,000 rows of a dataset with a billion rows because pulling all of it would take a week. **Sampling** is the machinery that lets a carefully chosen subset stand in for the whole — and *how* you choose that subset changes the accuracy of every estimate built on top of it, sometimes dramatically.
 
 This post covers the four classical probability-sampling designs — simple random, systematic, stratified, and cluster — plus the bootstrap, a fundamentally different, computational resampling method. Every method gets its math, R and Julia implementations, and at the end, a Monte Carlo simulation that doesn't just assert "stratified sampling reduces variance" but actually measures it happening.
@@ -50,14 +52,15 @@ $$
 
 The $\left(1 - \frac{n}{N}\right)$ term is the **finite population correction** — it shrinks toward zero as your sample covers more of the population (sample the whole population, $n = N$, and variance is correctly zero), and it's often dropped entirely when $N$ is large relative to $n$, which is why you'll usually just see $\sigma^2/n$.
 
-```r
-set.seed(42)
+Every R block below is editable and actually runs, right in the page — press **Run** to try it. It's powered by [webR](https://docs.r-wasm.org/webr/latest/), a self-hosted, WebAssembly build of R (first run downloads ~50 MB, cached after), so nothing is sent to a server and everything here is plain base R, no packages to install.
+
+<CodeRunner client:only="react" lang="r" code={`set.seed(42)
 population <- rnorm(10000, mean = 50, sd = 10)
 
 srs_sample <- sample(population, size = 300, replace = FALSE)
 mean(srs_sample)
 sd(srs_sample) / sqrt(length(srs_sample))   # estimated standard error
-```
+`} />
 
 ```julia
 using Random, Statistics
@@ -76,8 +79,7 @@ std(srs_sample) / sqrt(length(srs_sample))
 
 The catch: if the frame has **periodicity** that happens to line up with your stride $k$, systematic sampling can go badly wrong. The textbook example is sampling "every 7th day" of retail sales data — you'd sample the same day of the week every time, and your "sample" would badly misrepresent the full week's pattern.
 
-```r
-systematic_sample <- function(population, n) {
+<CodeRunner client:only="react" lang="r" code={`systematic_sample <- function(population, n) {
   N <- length(population)
   k <- floor(N / n)
   start <- sample(1:k, 1)
@@ -86,9 +88,10 @@ systematic_sample <- function(population, n) {
 }
 
 set.seed(42)
+population <- rnorm(10000, mean = 50, sd = 10)   # same population as section 3
 sys_sample <- systematic_sample(population, 300)
 mean(sys_sample)
-```
+`} />
 
 ```julia
 function systematic_sample(population, n)
@@ -116,8 +119,7 @@ $$
 
 Compare this to SRS's $\sigma^2/n$: the population variance $\sigma^2$ in the SRS formula gets replaced by a weighted sum of **within-stratum** variances $\sigma_h^2$. If most of the population's total variance comes from *differences between strata* rather than *differences within them* — exactly the situation you're in when your strata are well-chosen — the within-stratum variances are small, and stratified sampling's variance drops well below SRS's for the same total sample size. Section 9 measures exactly how much.
 
-```r
-set.seed(42)
+<CodeRunner client:only="react" lang="r" code={`set.seed(42)
 strata <- rep(c("A", "B", "C"), times = c(5000, 3000, 2000))
 values <- c(rnorm(5000, 40, 5), rnorm(3000, 60, 8), rnorm(2000, 80, 3))
 pop_df <- data.frame(stratum = strata, value = values)
@@ -133,7 +135,7 @@ stratified_sample <- function(df, n_total) {
 
 strat_sample <- stratified_sample(pop_df, 300)
 mean(strat_sample$value)
-```
+`} />
 
 ```julia
 using DataFrames, Random
@@ -171,8 +173,7 @@ $$
 
 where $m$ is the average cluster size and $\rho$ (the intra-cluster correlation) measures how similar units *within* a cluster are to each other. When clusters are naturally homogeneous internally — which is common, since geographic or organizational clusters often share whatever made them a natural grouping in the first place — $\rho$ is high, $DEFF$ is well above 1, and your effective sample size is much smaller than your actual headcount suggests: measuring 200 people from the same village doesn't give you 200 independent looks at the population, closer to $200/DEFF$.
 
-```r
-set.seed(42)
+<CodeRunner client:only="react" lang="r" code={`set.seed(42)
 n_clusters <- 100
 pop_df <- data.frame(
   cluster = rep(1:n_clusters, each = 100),
@@ -186,7 +187,7 @@ cluster_sample <- function(df, n_clusters_to_pick) {
 
 csamp <- cluster_sample(pop_df, 3)   # 3 clusters x 100 = 300, same total n as the other examples
 mean(csamp$value)
-```
+`} />
 
 ```julia
 using DataFrames, Random
@@ -224,8 +225,7 @@ $$
 
 where $\hat{\theta}^*_b$ is the statistic computed on the $b$-th bootstrap resample, out of $B$ total resamples, and $\bar{\hat{\theta}}^*$ is their average. Section 10 uses exactly this to put a confidence interval around a sample median.
 
-```r
-sample_data <- rexp(50, rate = 1/10)   # a single, skewed sample -- no more data available
+<CodeRunner client:only="react" lang="r" code={`sample_data <- rexp(50, rate = 1/10)   # a single, skewed sample -- no more data available
 
 boot_medians <- replicate(2000, {
   resample <- sample(sample_data, length(sample_data), replace = TRUE)
@@ -233,7 +233,7 @@ boot_medians <- replicate(2000, {
 })
 sd(boot_medians)                          # the bootstrap standard error
 quantile(boot_medians, c(0.025, 0.975))   # a 95% percentile confidence interval
-```
+`} />
 
 ```julia
 using Random, Statistics
@@ -252,8 +252,7 @@ Formulas claiming one design has lower variance than another are easy to state a
 
 The population: 10,000 units in 5 strata of 2,000 each, with very different stratum means (30, 45, 60, 75, 90) but low variation *within* each stratum ($\sigma=5$). Each stratum is further chunked into 20 contiguous clusters of 100 — so every cluster sits entirely inside one stratum, making clusters homogeneous internally and very different from each other, exactly the condition that makes cluster sampling struggle.
 
-```r
-set.seed(42)
+<CodeRunner client:only="react" lang="r" code={`set.seed(42)
 
 N <- 10000
 stratum_means <- c(30, 45, 60, 75, 90)
@@ -284,10 +283,10 @@ srs_estimates <- replicate(n_reps, srs_mean())
 stratified_estimates <- replicate(n_reps, stratified_mean())
 cluster_estimates <- replicate(n_reps, cluster_mean())
 
-cat(sprintf("SRS:        mean=%.3f  SD=%.4f\n", mean(srs_estimates), sd(srs_estimates)))
-cat(sprintf("Stratified: mean=%.3f  SD=%.4f\n", mean(stratified_estimates), sd(stratified_estimates)))
-cat(sprintf("Cluster:    mean=%.3f  SD=%.4f\n", mean(cluster_estimates), sd(cluster_estimates)))
-```
+cat(sprintf("SRS:        mean=%.3f  SD=%.4f\\n", mean(srs_estimates), sd(srs_estimates)))
+cat(sprintf("Stratified: mean=%.3f  SD=%.4f\\n", mean(stratified_estimates), sd(stratified_estimates)))
+cat(sprintf("Cluster:    mean=%.3f  SD=%.4f\\n", mean(cluster_estimates), sd(cluster_estimates)))
+`} />
 
 **Output (R):**
 
@@ -345,26 +344,25 @@ The Julia version above mirrors the R simulation's logic exactly, but R and Juli
 
 Section 8 introduced the bootstrap; here it is estimating uncertainty for a statistic — the median — that doesn't have a simple textbook standard-error formula, on data drawn from an exponential distribution (heavily right-skewed, the kind of shape response-time or claim-size data often has).
 
-```r
-set.seed(42)
+<CodeRunner client:only="react" lang="r" code={`set.seed(42)
 sample_data <- rexp(50, rate = 1/10)   # true median of the generating distribution: 10*log(2) = 6.931
-cat(sprintf("Sample median: %.3f\n", median(sample_data)))
+cat(sprintf("Sample median: %.3f\\n", median(sample_data)))
 
 boot_medians <- replicate(2000, {
   resample <- sample(sample_data, length(sample_data), replace = TRUE)
   median(resample)
 })
-cat(sprintf("Bootstrap SE of the median: %.3f\n", sd(boot_medians)))
+cat(sprintf("Bootstrap SE of the median: %.3f\\n", sd(boot_medians)))
 ci <- quantile(boot_medians, c(0.025, 0.975))
-cat(sprintf("95%% bootstrap percentile CI: [%.3f, %.3f]\n", ci[1], ci[2]))
-```
+cat(sprintf("95%% bootstrap percentile CI: [%.3f, %.3f]\\n", ci[1], ci[2]))
+`} />
 
 **Output (R):**
 
 ```text
-Sample median: 7.611
-Bootstrap SE of the median: 1.426
-95% bootstrap percentile CI: [5.138, 9.960]
+Sample median: 6.586
+Bootstrap SE of the median: 1.407
+95% bootstrap percentile CI: [4.387, 11.916]
 ```
 
 With only 50 observations and a genuinely skewed distribution, the bootstrap needed no formula for "the variance of a median" — a statistic that, unlike the mean, doesn't have one simple closed form — and no assumption that the data were normally distributed. It just resampled, recomputed, and read the uncertainty off the resulting spread. The interval correctly captures the true median of the generating distribution (6.931), and does so from resampling *alone*, with no additional data collected.
