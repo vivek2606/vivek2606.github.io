@@ -103,6 +103,7 @@ function systematic_sample(population, n)
 end
 
 Random.seed!(42)
+population = 50 .+ 10 .* randn(10000)   # same population as section 3
 sys_sample = systematic_sample(population, 300)
 mean(sys_sample)
 ```
@@ -356,6 +357,19 @@ cat(sprintf("Bootstrap SE of the median: %.3f\\n", sd(boot_medians)))
 ci <- quantile(boot_medians, c(0.025, 0.975))
 cat(sprintf("95%% bootstrap percentile CI: [%.3f, %.3f]\\n", ci[1], ci[2]))
 `} />
+
+```julia
+using Random, Statistics
+
+Random.seed!(42)
+sample_data = -10 .* log.(rand(50))   # Exponential(mean=10) via inverse-CDF sampling, Base only
+println("Sample median: ", round(median(sample_data), digits = 3))
+
+boot_medians = [median(rand(sample_data, length(sample_data))) for _ in 1:2000]
+println("Bootstrap SE of the median: ", round(std(boot_medians), digits = 3))
+ci = quantile(boot_medians, [0.025, 0.975])
+println("95% bootstrap percentile CI: [", round(ci[1], digits = 3), ", ", round(ci[2], digits = 3), "]")
+```
 
 **Output (R):**
 
