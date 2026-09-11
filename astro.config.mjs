@@ -9,8 +9,12 @@ import rehypeKatex from "rehype-katex";
 // username), which always serves at the domain root — unlike a project
 // site (any other repo name), which is served from /<repo-name>/. No
 // `base` config needed here as a result.
+//
+// Served from the custom domain in public/CNAME (vivekraj.online) rather
+// than the default *.github.io URL — `site` has to match what's actually
+// served, since it feeds every canonical URL, the sitemap, and the RSS feed.
 export default defineConfig({
-  site: "https://vivek2606.github.io",
+  site: "https://vivekraj.online",
   markdown: {
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],
