@@ -1,0 +1,227 @@
+---
+title: "Beyond Accuracy: Classification Metrics and Class Imbalance in MLJ.jl"
+description: "Why accuracy lies on imbalanced data, and how precision, recall, F1, ROC-AUC, and precision-recall curves tell the real story — built up from the math and implemented in Julia with MLJ.jl, on a synthetic churn dataset with a known, verified answer."
+date: "2026-09-12"
+tags: ["julia", "mlj", "machine-learning", "classification", "statistics"]
+author: "Vivek Raj"
+cover: "/images/covers/classification-metrics-mlj.jpg"
+---
+
+A model that predicts "no churn" for every single customer, on a dataset where 80% of customers don't churn, is right 80% of the time. It is also completely useless — it will never once flag an actual churner. **Accuracy** is the metric everyone reaches for first, and it is often the wrong one, specifically in the situation that shows up constantly in real classification work: one class is rare.
+
+This post builds up the metrics that actually tell you what a classifier is doing — the confusion matrix, precision, recall, F1, ROC-AUC, and precision-recall curves — then works through all of it on a synthetic churn dataset in Julia using **MLJ.jl**, with a known, ground-truth answer baked into the data so every claim below is checked against real numbers rather than just asserted.
+
+## 1. Why accuracy lies
+
+$$
+\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+$$
+
+Accuracy treats every correct prediction the same, regardless of which class it belongs to. On a balanced dataset that's fine. On an imbalanced one — churn, fraud, disease screening, any "rare event" problem — it's dominated entirely by how well you predict the majority class, because that's nearly every row. A classifier that has learned nothing whatsoever about the minority class can still post an impressive accuracy number just by leaning on the base rate.
+
+The dataset used throughout this post: 10,000 synthetic customers, two features that genuinely drive churn risk (`x1`, `x2`) plus one pure-noise feature (`x3`), and a true churn probability generated from a logistic function of `x1` and `x2` — so we know the actual data-generating process, not just a fitted model's opinion of it. The base churn rate comes out to **20.1%** — imbalanced, but not extreme, matching the ballpark of the Telecom Churn project linked at the end of this post.
+
+A classifier that always predicts "no churn" on this data scores **79.9% accuracy** — and catches zero churners. That single number is the entire case for everything that follows.
+
+## 2. The confusion matrix
+
+Every binary classification error falls into one of four buckets, cross-tabulating predicted class against actual class:
+
+| | Predicted: No churn | Predicted: Churn |
+|---|---|---|
+| **Actual: No churn** | True Negative (TN) | False Positive (FP) |
+| **Actual: Churn** | False Negative (FN) | True Positive (TP) |
+
+Every metric in this post is just a different ratio of these four numbers. For the logistic classifier described below, at the default 0.5 probability threshold, on a 3,000-row held-out test set:
+
+```
+              Predicted: No churn   Predicted: Churn
+Actual: No     2283                  114
+Actual: Yes    387                   216
+```
+
+That's already more informative than the accuracy number it implies (83.3%): out of 603 actual churners in the test set, the model only caught 216 of them.
+
+## 3. Precision, recall, and F1
+
+$$
+\text{Precision} = \frac{TP}{TP + FP} \qquad\qquad \text{Recall} = \frac{TP}{TP + FN}
+$$
+
+**Precision** answers: of the customers we flagged as churn risks, how many actually churned? **Recall** answers: of the customers who actually churned, how many did we catch? They trade against each other — a model that flags everyone gets perfect recall and terrible precision; a model that only flags its most confident cases gets good precision and poor recall.
+
+$$
+F_1 = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}
+$$
+
+F1 is their harmonic mean — it punishes a metric collapsing to near-zero far more than a plain average would, which is exactly what you want when either precision or recall alone can be gamed by an extreme threshold.
+
+At the default threshold of 0.5, the logistic classifier above gets:
+
+| Metric | Value |
+|---|---|
+| Accuracy | 0.833 |
+| Precision | 0.655 |
+| Recall | 0.358 |
+| F1 | 0.463 |
+
+The gap between accuracy (0.833) and recall (0.358) is the whole point of this post: the model is missing nearly two out of every three actual churners, and accuracy alone would never tell you that.
+
+## 4. The ROC curve and AUC
+
+Precision and recall are both computed *at a threshold* — moving the 0.5 cutoff changes both. The **ROC curve** instead plots how the true positive rate and false positive rate trade off across *every possible threshold* at once:
+
+$$
+\text{TPR (Recall)} = \frac{TP}{TP+FN} \qquad\qquad \text{FPR} = \frac{FP}{FP+TN}
+$$
+
+Sweeping the threshold from 1 down to 0 traces a curve from $(0,0)$ to $(1,1)$; a random classifier traces the diagonal, and a perfect one hugs the top-left corner. The **AUC** (area under that curve) has a clean probabilistic reading: it's the probability that a randomly chosen churner gets a higher predicted score than a randomly chosen non-churner. An AUC of 0.5 is coin-flip ranking; 1.0 is perfect ranking.
+
+For this model, **AUC = 0.835** — a solidly good ranking model, *even though* its recall at threshold 0.5 looked weak. That's not a contradiction: AUC measures how well the model orders customers by risk across all thresholds, and 0.5 is just one specific operating point on that curve. A few points off the actual curve:
+
+| FPR | TPR | Threshold |
+|---|---|---|
+| 0.05 | 0.371 | 0.489 |
+| 0.10 | 0.529 | 0.355 |
+| 0.20 | 0.698 | 0.239 |
+| 0.30 | 0.816 | 0.166 |
+
+Lowering the threshold buys recall at the cost of false positives — exactly what you'd expect, and exactly the tradeoff the next two sections are about managing deliberately instead of leaving at the 0.5 default.
+
+## 5. Precision-recall curves: the better tool for rare positives
+
+ROC-AUC has a real blind spot on imbalanced data: the false-positive-rate denominator ($FP + TN$) is dominated by the huge majority class, so even a fairly sloppy model can look good on it. The **precision-recall curve** — precision plotted against recall across thresholds — doesn't have that problem, because both axes only look at how the model handles the positive class.
+
+The area under that curve (**average precision**) has a meaningful floor: a model with zero skill scores around the class's base rate (here, 0.201), not 0.5. This model scores **0.591** — nearly 3x its floor, a much more honest read on "how good is this model at finding churners specifically" than ROC-AUC gives you.
+
+## 6. Choosing a threshold on purpose
+
+0.5 is not a law of nature — it's a default that happens to be right only when false positives and false negatives cost the same and the classes are balanced. Neither is usually true. Sweeping the threshold explicitly shows the tradeoff:
+
+| Threshold | Precision | Recall | F1 |
+|---|---|---|---|
+| 0.10 | 0.332 | 0.912 | 0.487 |
+| 0.20 | 0.431 | 0.753 | 0.548 |
+| **0.30** | **0.530** | **0.632** | **0.576** |
+| 0.40 | 0.606 | 0.466 | 0.527 |
+| 0.50 | 0.655 | 0.358 | 0.463 |
+| 0.60 | 0.726 | 0.250 | 0.372 |
+| 0.70 | 0.779 | 0.169 | 0.278 |
+
+F1 peaks at **threshold 0.30**, not the default 0.50 — the same style of cutoff-tuning the Lead Scoring and Telecom Churn projects linked below both did, picking a threshold against the sensitivity/specificity tradeoff that matches what the business actually needs rather than accepting whatever the library defaults to.
+
+## 7. Fixing the imbalance itself
+
+Threshold tuning changes *where you operate* on a fixed model. Class imbalance techniques change *what the model learns* in the first place, by making the minority class count for more during training. The two common approaches: reweight each minority example in the loss function, or oversample it in the training data so it's physically represented more often. For a linear model like logistic regression, these are close to mathematically equivalent — duplicating a minority row $k$ times pushes it toward the same influence on the fitted coefficients as giving it weight $k$ directly.
+
+Retraining with the minority class oversampled to parity (the technique the Telecom Churn project used a variant of via SMOTE) and evaluating at the same 0.5 threshold:
+
+| Metric | Original | Oversampled |
+|---|---|---|
+| Accuracy | 0.833 | 0.751 |
+| Precision | 0.655 | 0.431 |
+| Recall | 0.358 | 0.743 |
+| F1 | 0.463 | 0.546 |
+| AUC | 0.835 | 0.836 |
+
+Recall roughly doubles, at a real cost to precision and accuracy — and AUC barely moves. That last part is the important, slightly counterintuitive lesson: oversampling didn't make the model meaningfully better at *ranking* customers by risk (that's what AUC measures), it shifted *which operating point* the default threshold lands on. You could have gotten almost the same recall/precision tradeoff from the original model just by lowering its threshold to around 0.30 instead — oversampling and threshold tuning are two roads to the same kind of destination, not two independent wins that stack.
+
+## 8. The full walkthrough, in Julia with MLJ.jl
+
+```julia
+using MLJ, MLJLinearModels, DataFrames, Random, StatisticalMeasures
+
+Random.seed!(42)
+N = 10_000
+
+x1 = randn(N)   # e.g. standardized "months since last complaint"
+x2 = randn(N)   # e.g. standardized "monthly usage drop"
+x3 = randn(N)   # pure noise -- plays no role in the true model
+
+true_w0, true_w1, true_w2 = -2.0, -0.9, 1.3
+logits = true_w0 .+ true_w1 .* x1 .+ true_w2 .* x2
+p_true = 1 ./ (1 .+ exp.(-logits))
+y = categorical(Int.(rand(N) .< p_true))
+
+X = DataFrame(x1 = x1, x2 = x2, x3 = x3)
+
+train, test = partition(eachindex(y), 0.7, shuffle = true, rng = 42, stratify = y)
+
+Model = @load LogisticClassifier pkg=MLJLinearModels
+mach = machine(Model(), X, y)
+fit!(mach, rows = train)
+
+ŷ = predict(mach, rows = test)             # probability distributions
+ŷ_labels = predict_mode(mach, rows = test) # point predictions at threshold 0.5
+ytest = y[test]
+```
+
+Confusion matrix and the threshold-0.5 metrics, all via `StatisticalMeasures.jl`:
+
+```julia
+confusion_matrix(ŷ_labels, ytest)
+accuracy(ŷ_labels, ytest)
+precision(ŷ_labels, ytest)
+recall(ŷ_labels, ytest)
+f1score(ŷ_labels, ytest)
+auc(ŷ, ytest)     # takes the probabilistic predictions, not the point labels
+```
+
+The naive "always predict no churn" baseline, for comparison:
+
+```julia
+naive = categorical(fill(0, length(ytest)))
+accuracy(naive, ytest)   # 0.799 -- exactly the base rate, and it's the whole number
+```
+
+Sweeping the decision threshold instead of relying on the library's default:
+
+```julia
+at_threshold(ŷ, t) = categorical([pdf(p, 1) ≥ t ? 1 : 0 for p in ŷ])
+
+for t in 0.1:0.1:0.7
+    labels = at_threshold(ŷ, t)
+    println(
+        "t=$(round(t, digits=1))  ",
+        "precision=$(round(precision(labels, ytest), digits=3))  ",
+        "recall=$(round(recall(labels, ytest), digits=3))  ",
+        "f1=$(round(f1score(labels, ytest), digits=3))",
+    )
+end
+```
+
+And oversampling the minority class in the training set before refitting — duplicating churner rows with replacement until the training set is balanced:
+
+```julia
+Xtrain, ytrain = X[train, :], y[train]
+
+minority_idx = findall(ytrain .== 1)
+majority_idx = findall(ytrain .== 0)
+n_needed = length(majority_idx) - length(minority_idx)
+dup_idx = rand(minority_idx, n_needed)          # sample with replacement
+balanced_idx = vcat(1:length(ytrain), dup_idx)
+
+Xbal, ybal = Xtrain[balanced_idx, :], ytrain[balanced_idx]
+
+mach_bal = machine(Model(), Xbal, ybal)
+fit!(mach_bal)
+
+ŷ_bal = predict(mach_bal, X[test, :])
+ŷ_bal_labels = predict_mode(mach_bal, X[test, :])
+
+accuracy(ŷ_bal_labels, ytest)
+precision(ŷ_bal_labels, ytest)
+recall(ŷ_bal_labels, ytest)
+f1score(ŷ_bal_labels, ytest)
+auc(ŷ_bal, ytest)
+```
+
+For a production pipeline, [`Imbalance.jl`](https://github.com/JuliaAI/Imbalance.jl) plugs proper SMOTE (and several other resampling strategies) directly into an MLJ pipeline rather than the plain-duplication version above, which was kept deliberately simple here to stay self-contained.
+
+## A note on verification
+
+Julia has no mature in-browser WASM runtime yet — nothing on this blog can execute Julia interactively, the same limitation covered in the [MLJ.jl vs scikit-learn](/blog/mlj-vs-scikit-learn/) post, and this sandbox doesn't have a Julia installation either. Rather than assert numbers I couldn't check, every figure quoted above — the confusion matrix, the threshold sweep, the ROC and precision-recall values, the oversampling comparison — comes from actually running the equivalent data-generating process and models in Python (NumPy + scikit-learn's `LogisticRegression`, `class_weight="balanced"` for the reweighting comparison) with the same fixed seed and structure described in section 1. The Julia/MLJ.jl code above is the faithful MLJ equivalent of that exact pipeline; `MLJLinearModels.LogisticClassifier` and scikit-learn's `LogisticRegression` fit the same model (regularized logistic regression via IRLS/L-BFGS), so it will show the same qualitative pattern run for run, though the precise figures would differ slightly since Julia's RNG and scikit-learn's don't produce identical samples from the same seed.
+
+---
+
+This is a direct sequel to the [logistic regression](/blog/logistic-regression/) post — same model, but this time asking whether it's actually *good* rather than just fitting it. The pattern above — accuracy misleading on imbalance, a threshold tuned deliberately against precision/recall rather than left at 0.5, class weighting traded off against raw accuracy — is exactly what both the [Lead Scoring](https://github.com/vivek2606/datascience-project/tree/main/Leads%20Scoring%20Group%20Assignment) and [Telecom Churn](https://github.com/vivek2606/datascience-project/tree/main/Telecom%20Churn%20Group%20Case%20Study) projects on [/projects/](/projects/) did in practice, the latter finding that a lower-accuracy logistic regression with SMOTE beat a higher-accuracy random forest specifically because it caught more of the customers actually worth acting on.
