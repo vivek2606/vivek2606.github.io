@@ -984,6 +984,23 @@ a.tag-pill:hover {
   max-width: 760px;
 }
 
+.investing__widget--full {
+  max-width: none;
+}
+
+.investing__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  max-width: none;
+}
+
+.investing__row .investing__widget {
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: none;
+}
+
 .investing__widget-link {
   display: inline-block;
   margin-top: 0.5rem;
