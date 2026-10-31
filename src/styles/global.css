@@ -994,6 +994,19 @@ a.tag-pill:hover {
   max-width: none;
 }
 
+/* The container breaks full-bleed, but Trendlyne's own injected
+   <iframe> carries a hardcoded pixel width attribute that doesn't
+   care about its container's size -- override it directly so the
+   iframe itself actually fills the wider container instead of
+   leaving empty space to its right. (Its *content* reflowing to use
+   that extra width is then up to whether Trendlyne's own embedded
+   page is itself responsive -- not something CSS on this side can
+   control, since that's cross-origin content.) */
+.investing__widget--full iframe {
+  width: 100% !important;
+  max-width: none !important;
+}
+
 /* On a wide-enough landscape viewport (iPad landscape and up -- iPad
    landscape widths run 1024-1366px depending on model), break the IPO
    widget out of the centered .site column entirely so it spans the
