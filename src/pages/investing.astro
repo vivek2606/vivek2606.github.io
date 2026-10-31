@@ -49,6 +49,13 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
         View on Trendlyne ↗
       </a>
     </div>
+    <div class="investing__widget">
+      <h2>Checklist</h2>
+      <div id="checklist-widget"></div>
+      <a id="checklist-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
+        View on Trendlyne ↗
+      </a>
+    </div>
 
     <h2>IPOs</h2>
     <p>Upcoming, open, and recent IPOs — not tied to the stock picker above.</p>
@@ -75,6 +82,7 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
   const widgets: { kind: string; containerId: string; linkId: string }[] = [
     { kind: "swot-widget", containerId: "swot-widget", linkId: "swot-widget-link" },
     { kind: "technical-widget", containerId: "technical-widget", linkId: "technical-widget-link" },
+    { kind: "checklist-widget", containerId: "checklist-widget", linkId: "checklist-widget-link" },
   ];
 
   function widgetUrl(kind: string, symbol: string): string {
