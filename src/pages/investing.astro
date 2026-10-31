@@ -49,6 +49,16 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
         View on Trendlyne ↗
       </a>
     </div>
+
+    <h2>IPOs</h2>
+    <p>Upcoming, open, and recent IPOs — not tied to the stock picker above.</p>
+    <div class="investing__widget">
+      <div id="ipo-widget"></div>
+      <a id="ipo-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
+        View on Trendlyne ↗
+      </a>
+    </div>
+
     <p class="investing__note">
       Widget not showing? Some browsers (Safari on iPhone/iPad in particular, with "Prevent
       Cross-Site Tracking" on) block embedded third-party widgets like this one — use the "View on
@@ -70,6 +80,9 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
   function widgetUrl(kind: string, symbol: string): string {
     return `https://trendlyne.com/web-widget/${kind}/Poppins/${symbol}/?${WIDGET_PARAMS}`;
   }
+
+  const IPO_WIDGET_URL =
+    "https://trendlyne.com/web-widget/ipo-widget/Poppins/?activeCol=006AFF&linksCol=006CFF&primary=202020&secondary=666666&positive=00a25b&negative=ff4e54";
 
   // Trendlyne's tl-widgets.js scans the page for `.trendlyne-widgets`
   // blockquotes on script load and swaps each one for the real widget.
@@ -94,6 +107,28 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
       const link = document.getElementById(linkId) as HTMLAnchorElement | null;
       if (link) link.href = url;
     }
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js";
+    document.body.appendChild(script);
+  }
+
+  // IPO widget isn't tied to a stock, so it's rendered once and never
+  // touched again by the stock picker.
+  function renderIpoWidget() {
+    const container = document.getElementById("ipo-widget");
+    if (container) {
+      container.innerHTML = "";
+      const blockquote = document.createElement("blockquote");
+      blockquote.className = "trendlyne-widgets";
+      blockquote.setAttribute("data-get-url", IPO_WIDGET_URL);
+      blockquote.setAttribute("data-theme", "light");
+      container.appendChild(blockquote);
+    }
+
+    const link = document.getElementById("ipo-widget-link") as HTMLAnchorElement | null;
+    if (link) link.href = IPO_WIDGET_URL;
 
     const script = document.createElement("script");
     script.async = true;
@@ -185,5 +220,6 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
     // Initial render for the default stock shown in the input.
     const initialSymbol = stocks.find((s) => s.symbol === "INFY")?.symbol ?? stocks[0]?.symbol;
     if (initialSymbol) renderWidgets(initialSymbol);
+    renderIpoWidget();
   }
 </script>
