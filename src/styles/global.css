@@ -897,6 +897,32 @@ a.tag-pill:hover {
   max-width: 65ch;
 }
 
+.investing__picker-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 1.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.investing__picker {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--fg);
+  font-size: 0.95rem;
+}
+
+.investing__picker:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .investing__widget {
   margin-top: 1.5rem;
   max-width: 480px;

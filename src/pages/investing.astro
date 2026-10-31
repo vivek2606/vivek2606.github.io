@@ -1,34 +1,87 @@
 ---
 import Base from "../layouts/Base.astro";
+
+const stocks = [
+  { symbol: "INFY", name: "Infosys" },
+  { symbol: "TCS", name: "Tata Consultancy Services" },
+  { symbol: "RELIANCE", name: "Reliance Industries" },
+  { symbol: "HDFCBANK", name: "HDFC Bank" },
+  { symbol: "ICICIBANK", name: "ICICI Bank" },
+  { symbol: "SBIN", name: "State Bank of India" },
+  { symbol: "TATAMOTORS", name: "Tata Motors" },
+  { symbol: "ITC", name: "ITC" },
+  { symbol: "LT", name: "Larsen & Toubro" },
+  { symbol: "WIPRO", name: "Wipro" },
+];
 ---
 
 <Base
   title="Investing · Vivek Raj"
-  description="A quick SWOT snapshot of stocks I follow, via Trendlyne."
+  description="A quick SWOT and technical snapshot of stocks I follow, via Trendlyne."
 >
   <article class="investing">
     <h1>Investing</h1>
     <p>
-      A SWOT snapshot (strengths, weaknesses, opportunities, threats) for stocks I keep an eye on,
-      via <a href="https://trendlyne.com/" target="_blank" rel="noopener noreferrer">Trendlyne</a>.
+      A SWOT and technical snapshot for stocks I keep an eye on, via
+      <a href="https://trendlyne.com/" target="_blank" rel="noopener noreferrer">Trendlyne</a>. Pick a
+      stock below to load its widgets.
     </p>
+
+    <label class="investing__picker-label" for="stock-picker">Stock</label>
+    <select id="stock-picker" class="investing__picker">
+      {stocks.map((s) => <option value={s.symbol}>{s.name} ({s.symbol})</option>)}
+    </select>
+
     <div class="investing__widget">
       <h2>SWOT</h2>
-      <blockquote
-        class="trendlyne-widgets"
-        data-get-url="https://trendlyne.com/web-widget/swot-widget/Poppins/INFY/?posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E"
-        data-theme="light"
-      ></blockquote>
+      <div id="swot-widget"></div>
     </div>
     <div class="investing__widget">
       <h2>Technical Analysis</h2>
-      <blockquote
-        class="trendlyne-widgets"
-        data-get-url="https://trendlyne.com/web-widget/technical-widget/Poppins/INFY/?posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E"
-        data-theme="light"
-      ></blockquote>
+      <div id="technical-widget"></div>
     </div>
   </article>
-
-  <script async src="https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js"></script>
 </Base>
+
+<script>
+  const WIDGET_PARAMS = "posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E";
+
+  const widgets: { kind: string; containerId: string }[] = [
+    { kind: "swot-widget", containerId: "swot-widget" },
+    { kind: "technical-widget", containerId: "technical-widget" },
+  ];
+
+  function widgetUrl(kind: string, symbol: string): string {
+    return `https://trendlyne.com/web-widget/${kind}/Poppins/${symbol}/?${WIDGET_PARAMS}`;
+  }
+
+  // Trendlyne's tl-widgets.js scans the page for `.trendlyne-widgets`
+  // blockquotes on script load and swaps each one for the real widget.
+  // To re-render for a newly picked stock, swap in a fresh, unprocessed
+  // blockquote and re-insert a fresh <script> tag -- inserting a new
+  // script element re-runs its top-level code even though the file
+  // itself is cached, which re-triggers that DOM scan.
+  function renderWidgets(symbol: string) {
+    for (const { kind, containerId } of widgets) {
+      const container = document.getElementById(containerId);
+      if (!container) continue;
+      container.innerHTML = "";
+      const blockquote = document.createElement("blockquote");
+      blockquote.className = "trendlyne-widgets";
+      blockquote.setAttribute("data-get-url", widgetUrl(kind, symbol));
+      blockquote.setAttribute("data-theme", "light");
+      container.appendChild(blockquote);
+    }
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js";
+    document.body.appendChild(script);
+  }
+
+  const picker = document.getElementById("stock-picker") as HTMLSelectElement | null;
+  if (picker) {
+    renderWidgets(picker.value);
+    picker.addEventListener("change", () => renderWidgets(picker.value));
+  }
+</script>
