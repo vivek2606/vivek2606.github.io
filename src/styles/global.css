@@ -894,6 +894,15 @@ a.tag-pill:hover {
 /* Investing page */
 
 .investing {
+  max-width: 900px;
+}
+
+/* Prose paragraphs (intro, IPO blurb, the Safari note) are direct
+   children of .investing -- widget content lives nested inside
+   .investing__widget instead, so this doesn't touch that. Keep these
+   at a readable measure even though the article itself is now wide
+   enough for the widgets. */
+.investing > p {
   max-width: 65ch;
 }
 
@@ -972,7 +981,7 @@ a.tag-pill:hover {
 
 .investing__widget {
   margin-top: 1.5rem;
-  max-width: 480px;
+  max-width: 760px;
 }
 
 .investing__widget-link {
