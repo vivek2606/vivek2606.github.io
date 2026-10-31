@@ -1,18 +1,8 @@
 ---
 import Base from "../layouts/Base.astro";
+import { stocks } from "../data/nse-stocks";
 
-const stocks = [
-  { symbol: "INFY", name: "Infosys" },
-  { symbol: "TCS", name: "Tata Consultancy Services" },
-  { symbol: "RELIANCE", name: "Reliance Industries" },
-  { symbol: "HDFCBANK", name: "HDFC Bank" },
-  { symbol: "ICICIBANK", name: "ICICI Bank" },
-  { symbol: "SBIN", name: "State Bank of India" },
-  { symbol: "TATAMOTORS", name: "Tata Motors" },
-  { symbol: "ITC", name: "ITC" },
-  { symbol: "LT", name: "Larsen & Toubro" },
-  { symbol: "WIPRO", name: "Wipro" },
-];
+const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
 ---
 
 <Base
@@ -23,14 +13,27 @@ const stocks = [
     <h1>Investing</h1>
     <p>
       A SWOT and technical snapshot for stocks I keep an eye on, via
-      <a href="https://trendlyne.com/" target="_blank" rel="noopener noreferrer">Trendlyne</a>. Pick a
-      stock below to load its widgets.
+      <a href="https://trendlyne.com/" target="_blank" rel="noopener noreferrer">Trendlyne</a>. Search
+      for a stock below to load its widgets.
     </p>
 
-    <label class="investing__picker-label" for="stock-picker">Stock</label>
-    <select id="stock-picker" class="investing__picker">
-      {stocks.map((s) => <option value={s.symbol}>{s.name} ({s.symbol})</option>)}
-    </select>
+    <label class="investing__picker-label" for="stock-search">Stock</label>
+    <div class="investing__combobox">
+      <input
+        id="stock-search"
+        class="investing__picker"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="stock-options"
+        aria-autocomplete="list"
+        placeholder="Type a company name or symbol..."
+        value={`${defaultStock.name} (${defaultStock.symbol})`}
+      />
+      <ul id="stock-options" class="investing__options" role="listbox" hidden></ul>
+    </div>
 
     <div class="investing__widget">
       <h2>SWOT</h2>
@@ -55,6 +58,8 @@ const stocks = [
 </Base>
 
 <script>
+  import { stocks, type Stock } from "../data/nse-stocks";
+
   const WIDGET_PARAMS = "posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E";
 
   const widgets: { kind: string; containerId: string; linkId: string }[] = [
@@ -96,9 +101,89 @@ const stocks = [
     document.body.appendChild(script);
   }
 
-  const picker = document.getElementById("stock-picker") as HTMLSelectElement | null;
-  if (picker) {
-    renderWidgets(picker.value);
-    picker.addEventListener("change", () => renderWidgets(picker.value));
+  // --- Searchable combobox -------------------------------------------
+  const input = document.getElementById("stock-search") as HTMLInputElement | null;
+  const optionsList = document.getElementById("stock-options") as HTMLUListElement | null;
+
+  function label(s: Stock): string {
+    return `${s.name} (${s.symbol})`;
+  }
+
+  function matches(s: Stock, query: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q);
+  }
+
+  function closeOptions() {
+    if (!optionsList || !input) return;
+    optionsList.hidden = true;
+    optionsList.innerHTML = "";
+    input.setAttribute("aria-expanded", "false");
+  }
+
+  function selectStock(s: Stock) {
+    if (!input) return;
+    input.value = label(s);
+    closeOptions();
+    renderWidgets(s.symbol);
+  }
+
+  function openOptions(query: string) {
+    if (!optionsList || !input) return;
+    const results = stocks.filter((s) => matches(s, query)).slice(0, 25);
+    optionsList.innerHTML = "";
+
+    if (results.length === 0) {
+      const li = document.createElement("li");
+      li.className = "investing__option investing__option--empty";
+      li.textContent = "No matching stock";
+      optionsList.appendChild(li);
+    } else {
+      for (const s of results) {
+        const li = document.createElement("li");
+        li.className = "investing__option";
+        li.setAttribute("role", "option");
+        li.tabIndex = -1;
+        li.textContent = label(s);
+        li.addEventListener("mousedown", (e) => {
+          // mousedown (not click) so this fires before the input's blur
+          e.preventDefault();
+          selectStock(s);
+        });
+        optionsList.appendChild(li);
+      }
+    }
+
+    optionsList.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  if (input && optionsList) {
+    input.addEventListener("focus", () => openOptions(""));
+    input.addEventListener("input", () => openOptions(input.value));
+    input.addEventListener("blur", () => closeOptions());
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeOptions();
+        return;
+      }
+      if (e.key === "Enter") {
+        const first = optionsList.querySelector(".investing__option:not(.investing__option--empty)");
+        if (first) {
+          e.preventDefault();
+          (first as HTMLElement).dispatchEvent(new MouseEvent("mousedown"));
+        }
+        return;
+      }
+      if (e.key === "ArrowDown" && optionsList.hidden) {
+        openOptions(input.value);
+      }
+    });
+
+    // Initial render for the default stock shown in the input.
+    const initialSymbol = stocks.find((s) => s.symbol === "INFY")?.symbol ?? stocks[0]?.symbol;
+    if (initialSymbol) renderWidgets(initialSymbol);
   }
 </script>

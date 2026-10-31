@@ -923,6 +923,53 @@ a.tag-pill:hover {
   outline-offset: 1px;
 }
 
+.investing__combobox {
+  position: relative;
+  max-width: 340px;
+}
+
+.investing__combobox .investing__picker {
+  max-width: none;
+}
+
+.investing__options {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+
+.investing__option {
+  padding: 0.5rem 0.65rem;
+  border-radius: 7px;
+  font-size: 0.9rem;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.investing__option:hover {
+  background: var(--bg);
+}
+
+.investing__option--empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+.investing__option--empty:hover {
+  background: none;
+}
+
 .investing__widget {
   margin-top: 1.5rem;
   max-width: 480px;
