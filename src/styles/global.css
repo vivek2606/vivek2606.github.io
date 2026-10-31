@@ -68,12 +68,6 @@ body {
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* Needed for the Investing page's full-bleed IPO widget, which uses
-     100vw to break out of the centered .site column -- 100vw can be a
-     few px wider than the visible viewport when a scrollbar is
-     present, which would otherwise introduce a horizontal scrollbar
-     of its own. */
-  overflow-x: hidden;
 }
 
 ::selection {
@@ -900,15 +894,6 @@ a.tag-pill:hover {
 /* Investing page */
 
 .investing {
-  max-width: 900px;
-}
-
-/* Prose paragraphs (intro, IPO blurb, the Safari note) are direct
-   children of .investing -- widget content lives nested inside
-   .investing__widget instead, so this doesn't touch that. Keep these
-   at a readable measure even though the article itself is now wide
-   enough for the widgets. */
-.investing > p {
   max-width: 65ch;
 }
 
@@ -987,52 +972,7 @@ a.tag-pill:hover {
 
 .investing__widget {
   margin-top: 1.5rem;
-  max-width: 760px;
-}
-
-.investing__widget--full {
-  max-width: none;
-}
-
-/* The container breaks full-bleed, but Trendlyne's own injected
-   <iframe> carries a hardcoded pixel width attribute that doesn't
-   care about its container's size -- override it directly so the
-   iframe itself actually fills the wider container instead of
-   leaving empty space to its right. (Its *content* reflowing to use
-   that extra width is then up to whether Trendlyne's own embedded
-   page is itself responsive -- not something CSS on this side can
-   control, since that's cross-origin content.) */
-.investing__widget--full iframe {
-  width: 100% !important;
-  max-width: none !important;
-}
-
-/* On a wide-enough landscape viewport (iPad landscape and up -- iPad
-   landscape widths run 1024-1366px depending on model), break the IPO
-   widget out of the centered .site column entirely so it spans the
-   full screen width instead of stopping at the page's normal content
-   width. */
-@media (min-width: 1000px) and (orientation: landscape) {
-  .investing__widget--full {
-    width: 100vw;
-    margin-left: 50%;
-    transform: translateX(-50%);
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
-  }
-}
-
-.investing__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  max-width: none;
-}
-
-.investing__row .investing__widget {
-  flex: 1 1 320px;
-  min-width: 0;
-  max-width: none;
+  max-width: 480px;
 }
 
 .investing__widget-link {

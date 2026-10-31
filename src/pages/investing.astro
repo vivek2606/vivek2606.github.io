@@ -8,7 +8,6 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
 <Base
   title="Investing · Vivek Raj"
   description="A quick SWOT and technical snapshot of stocks I follow, via Trendlyne."
-  maxWidth="900px"
 >
   <article class="investing">
     <h1>Investing</h1>
@@ -36,21 +35,19 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
       <ul id="stock-options" class="investing__options" role="listbox" hidden></ul>
     </div>
 
-    <div class="investing__row">
-      <div class="investing__widget">
-        <h2>SWOT</h2>
-        <div id="swot-widget"></div>
-        <a id="swot-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
-          View on Trendlyne ↗
-        </a>
-      </div>
-      <div class="investing__widget">
-        <h2>Technical Analysis</h2>
-        <div id="technical-widget"></div>
-        <a id="technical-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
-          View on Trendlyne ↗
-        </a>
-      </div>
+    <div class="investing__widget">
+      <h2>SWOT</h2>
+      <div id="swot-widget"></div>
+      <a id="swot-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
+        View on Trendlyne ↗
+      </a>
+    </div>
+    <div class="investing__widget">
+      <h2>Technical Analysis</h2>
+      <div id="technical-widget"></div>
+      <a id="technical-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
+        View on Trendlyne ↗
+      </a>
     </div>
     <div class="investing__widget">
       <h2>Checklist</h2>
@@ -62,7 +59,7 @@ const defaultStock = stocks.find((s) => s.symbol === "INFY") ?? stocks[0];
 
     <h2>IPOs</h2>
     <p>Upcoming, open, and recent IPOs — not tied to the stock picker above.</p>
-    <div class="investing__widget investing__widget--full">
+    <div class="investing__widget">
       <div id="ipo-widget"></div>
       <a id="ipo-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
         View on Trendlyne ↗
