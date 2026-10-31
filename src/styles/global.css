@@ -928,6 +928,24 @@ a.tag-pill:hover {
   max-width: 480px;
 }
 
+.investing__widget-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.investing__widget-link:hover {
+  text-decoration: underline;
+}
+
+.investing__note {
+  margin-top: 2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .not-found {
   display: flex;
   flex-direction: column;

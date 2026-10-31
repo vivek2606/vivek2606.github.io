@@ -35,20 +35,31 @@ const stocks = [
     <div class="investing__widget">
       <h2>SWOT</h2>
       <div id="swot-widget"></div>
+      <a id="swot-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
+        View on Trendlyne ↗
+      </a>
     </div>
     <div class="investing__widget">
       <h2>Technical Analysis</h2>
       <div id="technical-widget"></div>
+      <a id="technical-widget-link" class="investing__widget-link" target="_blank" rel="noopener noreferrer">
+        View on Trendlyne ↗
+      </a>
     </div>
+    <p class="investing__note">
+      Widget not showing? Some browsers (Safari on iPhone/iPad in particular, with "Prevent
+      Cross-Site Tracking" on) block embedded third-party widgets like this one — use the "View on
+      Trendlyne" link above instead.
+    </p>
   </article>
 </Base>
 
 <script>
   const WIDGET_PARAMS = "posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E";
 
-  const widgets: { kind: string; containerId: string }[] = [
-    { kind: "swot-widget", containerId: "swot-widget" },
-    { kind: "technical-widget", containerId: "technical-widget" },
+  const widgets: { kind: string; containerId: string; linkId: string }[] = [
+    { kind: "swot-widget", containerId: "swot-widget", linkId: "swot-widget-link" },
+    { kind: "technical-widget", containerId: "technical-widget", linkId: "technical-widget-link" },
   ];
 
   function widgetUrl(kind: string, symbol: string): string {
@@ -62,15 +73,21 @@ const stocks = [
   // script element re-runs its top-level code even though the file
   // itself is cached, which re-triggers that DOM scan.
   function renderWidgets(symbol: string) {
-    for (const { kind, containerId } of widgets) {
+    for (const { kind, containerId, linkId } of widgets) {
+      const url = widgetUrl(kind, symbol);
+
       const container = document.getElementById(containerId);
-      if (!container) continue;
-      container.innerHTML = "";
-      const blockquote = document.createElement("blockquote");
-      blockquote.className = "trendlyne-widgets";
-      blockquote.setAttribute("data-get-url", widgetUrl(kind, symbol));
-      blockquote.setAttribute("data-theme", "light");
-      container.appendChild(blockquote);
+      if (container) {
+        container.innerHTML = "";
+        const blockquote = document.createElement("blockquote");
+        blockquote.className = "trendlyne-widgets";
+        blockquote.setAttribute("data-get-url", url);
+        blockquote.setAttribute("data-theme", "light");
+        container.appendChild(blockquote);
+      }
+
+      const link = document.getElementById(linkId) as HTMLAnchorElement | null;
+      if (link) link.href = url;
     }
 
     const script = document.createElement("script");
