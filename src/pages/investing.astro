@@ -1,0 +1,34 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="Investing · Vivek Raj"
+  description="A quick SWOT snapshot of stocks I follow, via Trendlyne."
+>
+  <article class="investing">
+    <h1>Investing</h1>
+    <p>
+      A SWOT snapshot (strengths, weaknesses, opportunities, threats) for stocks I keep an eye on,
+      via <a href="https://trendlyne.com/" target="_blank" rel="noopener noreferrer">Trendlyne</a>.
+    </p>
+    <div class="investing__widget">
+      <h2>SWOT</h2>
+      <blockquote
+        class="trendlyne-widgets"
+        data-get-url="https://trendlyne.com/web-widget/swot-widget/Poppins/INFY/?posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E"
+        data-theme="light"
+      ></blockquote>
+    </div>
+    <div class="investing__widget">
+      <h2>Technical Analysis</h2>
+      <blockquote
+        class="trendlyne-widgets"
+        data-get-url="https://trendlyne.com/web-widget/technical-widget/Poppins/INFY/?posCol=00A25B&primaryCol=006AFF&negCol=EB3B00&neuCol=F7941E"
+        data-theme="light"
+      ></blockquote>
+    </div>
+  </article>
+
+  <script async src="https://cdn-static.trendlyne.com/static/js/webwidgets/tl-widgets.js"></script>
+</Base>
