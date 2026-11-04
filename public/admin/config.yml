@@ -1,0 +1,51 @@
+backend:
+  name: github
+  repo: vivek2606/vivek2606.github.io
+  branch: main
+  # No base_url set here -- it defaults to https://api.netlify.com, a
+  # free OAuth proxy Netlify provides for exactly this situation (a
+  # GitHub-backed static site that isn't actually hosted on Netlify).
+  # That still needs a one-time setup: a free Netlify account + a GitHub
+  # OAuth App pointed at Netlify's callback URL. See README-cms.md at
+  # the repo root for the exact steps.
+
+# Lets `npx decap-server` run a local git backend for testing the CMS on
+# localhost without any OAuth setup at all -- commits go straight to your
+# local working tree instead of GitHub. Safe to leave on; it only
+# activates when the CMS is opened from localhost.
+local_backend: true
+
+media_folder: "public/images"
+public_folder: "/images"
+
+publish_mode: simple
+
+collections:
+  - name: "blog"
+    label: "Blog Posts"
+    folder: "src/content/blog"
+    create: true
+    slug: "{{slug}}"
+    extension: "mdx"
+    format: "frontmatter"
+    fields:
+      - { label: "Title", name: "title", widget: "string" }
+      - { label: "Description", name: "description", widget: "text" }
+      - label: "Publish Date"
+        name: "date"
+        widget: "datetime"
+        format: "YYYY-MM-DD"
+        date_format: "YYYY-MM-DD"
+        time_format: false
+      - { label: "Tags", name: "tags", widget: "list", default: [] }
+      - { label: "Author", name: "author", widget: "string", default: "Vivek Raj" }
+      - label: "Cover Image"
+        name: "cover"
+        widget: "image"
+        required: false
+        media_folder: "/public/images/covers"
+        public_folder: "/images/covers"
+      - label: "Body"
+        name: "body"
+        widget: "markdown"
+        hint: "This blog uses MDX -- posts with interactive code blocks (CodeRunner / imports at the top of the file) should be edited in the raw markdown view (the toggle in this field's toolbar), not the rich-text view, which isn't MDX-aware and can mangle JSX on save."
